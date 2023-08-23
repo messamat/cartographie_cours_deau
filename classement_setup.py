@@ -4,19 +4,22 @@ import numpy as np
 
 warnings.simplefilter(action='ignore', category=FutureWarning) #TO GET READ OF ITERITEMS SPAM FROM PANDAS
 
+from datetime import date
 from inspect import getsourcefile
 import itertools
 import os
 import pandas as pd #Rpd.read_excel equires optional dependency openpyxl
 from pathlib import Path
+import pip_system_certs.wrapt_requests
 import re
 import requests
 import shutil
 import sys
 import urllib3
 import xmltodict
-from flatten_dict import flatten #INstall from https://github.com/ianlini/flatten-dict #github connection solved with https://stackoverflow.com/questions/72486457/fatal-unable-to-connect-to-github-com-github-com0-140-82-121-4-errno-unkno #Then pip install git+git://github.com/ianlini/flatten-dict.git in Pycharm terminal
+from flatten_dict import flatten #INstall from https://github.com/ianlini/flatten-dict #github connection solved with https://stackoverflow.com/questions/72486457/fatal-unable-to-connect-to-github-com-github-com0-140-82-121-4-errno-unkno #Then .\pyenv\python.exe -m pip install git+git://github.com/ianlini/flatten-dict.git
 import zipfile
+
 
 #Utility functions
 def get_root_fromsrcdir():
@@ -163,7 +166,10 @@ def get_geoide_metadata_fromxmldict(in_xmldict):
 def get_geoide_metadata_tab(row, in_dir, overwrite=False):
     print(f'Processing {row.Département} - {row.sitenum}')
 
-    depdir = Path(in_dir, re.sub('[-]', '_', row.Département))
+    depdir = Path(in_dir, "D{0}_{1}".format(
+        row.Numéro,
+        re.sub('[-]', '_', row.Département)
+    ))
     if not depdir.exists():
         os.mkdir(depdir)
 
@@ -196,15 +202,24 @@ def get_geoide_metadata_tab(row, in_dir, overwrite=False):
         metadata_dict['xml_url'] = exurl
     return(metadata_dict)
 
-def download_atomarchive_fromgeoidemetadata(row, in_dir):
+def download_atomarchive_fromgeoidemetadata(row, in_dir, verify_SSLcertificate=True):
     if (not pd.isna(row.atom_internet_url)):
         if (len(row.atom_internet_url) > 0):
             exurl = row.atom_internet_url[0]
-            depdir = Path(in_dir, re.sub('[-]', '_', row.Département))
+
+            depdir = Path(in_dir, "D{0}_{1}".format(
+                row.Numéro,
+                re.sub('[-]', '_', row.Département)
+            ))
+
             out_atom = Path(depdir, f"{''.join([x if x.isalnum() else '_' for x in row.title][0:30])}_"
                                     f"{re.sub('[-]', '_', row.id)}.zip")
 
-            http = urllib3.PoolManager()
+            #Format SSL certificate verification
+            if (verify_SSLcertificate == False):
+                in_cert_reqs = 'CERT_NONE'
+
+            http = urllib3.PoolManager(cert_reqs = in_cert_reqs)
             if not out_atom.exists():
                 try:
                     print(f'Attempting atom archive download for {row.Département}')
