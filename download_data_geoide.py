@@ -4,13 +4,13 @@ warnings.simplefilter(action='ignore', category=FutureWarning) #TO GET READ OF I
 from classement_setup import * #Get directory structure and packages
 
 #Create folder to store geo-ide
-geoide_dir = Path(resdir, 'geoide')
+geoide_dir = Path(datdir, 'geoide')
 if not geoide_dir.exists():
     os.mkdir(geoide_dir)
 
 #Read compilation of data sources by French department
 datasources_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
-datasources_pd = pd.read_excel(datasources_path)
+datasources_pd = pd.read_excel(datasources_path, sheet_name = 'Ressources')
 
 #Format as long table
 re_geoide = re.compile('Catalogue interministériel de données géographiques')
@@ -21,7 +21,7 @@ datasources_pdlong = pd.melt(datasources_pd,
                          var_name='sitenum',
                          value_name='geoide_url',
                          ignore_index=True).\
-    dropna(subset='geoide_url').\
+    dropna(subset=['geoide_url']).\
     reset_index(drop=True)
 
 #Format base URL to URL to XML metadata
@@ -46,12 +46,14 @@ metadata_xml_pd = pd.concat(
 #Write table
 metadata_xml_pd.\
     sort_values(by=['Numéro', 'revision_date']).\
-    to_csv(Path(resdir, "metadonnes_cartographie_cours_deau_geoidemerge.csv"), encoding='utf-8')
+    to_csv(Path(resdir, "metadonnes_cartographie_cours_deau_geoidemerge{}.csv".format(
+    date.today().strftime("%y%m%d"))),
+           encoding='utf-8')
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~ DOWNLOAD DATA ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #Download atom archive
 metadata_xml_pd['Atom_archive_download_output'] = metadata_xml_pd.apply(download_atomarchive_fromgeoidemetadata,
-                                                                        args=(geoide_dir,),
+                                                                        args=(geoide_dir, False),
                                                                         axis=1)
 #Check which departments have no atom archive
 metadata_xml_pd[~metadata_xml_pd['Département'].isin(metadata_xml_pd[(metadata_xml_pd['Atom_archive_download_output'] != 'No atom archive')]['Département'].unique())]['Département'].unique()
