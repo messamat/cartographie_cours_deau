@@ -1,4 +1,4 @@
-from classement_setup import  *
+from setup_classement import  *
 
 import os, sys, re
 import requests

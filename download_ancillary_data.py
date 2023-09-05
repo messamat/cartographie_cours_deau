@@ -1,4 +1,4 @@
-from classement_setup import  *
+from setup_classement import  *
 
 
 admin_express_url = "https://wxs.ign.fr/x02uy2aiwjo9bm8ce5plwqmr/telechargement/prepackage/ADMINEXPRESS_SHP_WGS84G_PACK_2023-05-04$ADMIN-EXPRESS_3-2__SHP_WGS84G_FRA_2023-05-03/file/ADMIN-EXPRESS_3-2__SHP_WGS84G_FRA_2023-05-03.7z"

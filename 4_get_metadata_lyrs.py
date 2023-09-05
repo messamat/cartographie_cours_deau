@@ -1,4 +1,4 @@
-from classement_setup import * #Get directory structure and packages
+from setup_classement import * #Get directory structure and packages
 import geopandas as gpd
 from datetime import date
 

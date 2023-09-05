@@ -2,7 +2,7 @@ import requests
 from lxml import html
 from googlesearch import search
 from bs4 import BeautifulSoup
-from classement_setup import  *
+from setup_classement import  *
 
 
 geoide_dir = Path(resdir, 'geoide')

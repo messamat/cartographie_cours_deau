@@ -1,7 +1,7 @@
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning) #TO GET READ OF ITERITEMS SPAM FROM PANDAS
 
-from classement_setup import * #Get directory structure and packages
+from setup_classement import * #Get directory structure and packages
 
 #Create folder to store geo-ide
 geoide_dir = Path(datdir, 'geoide')
@@ -59,7 +59,7 @@ metadata_xml_pd['Atom_archive_download_output'] = metadata_xml_pd.apply(download
 metadata_xml_pd[~metadata_xml_pd['Département'].isin(metadata_xml_pd[(metadata_xml_pd['Atom_archive_download_output'] != 'No atom archive')]['Département'].unique())]['Département'].unique()
 
 #Unzip downloaded data
-for zipf in getfilelist(dir=Path(resdir, 'geoide'), repattern=".*[.]zip"):
+for zipf in getfilelist(dir=geoide_dir, repattern=".*[.]zip"):
     unzip(zipf)
 
 #Download WFS data
