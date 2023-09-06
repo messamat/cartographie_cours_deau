@@ -1,0 +1,168 @@
+from setup_classement import * #Get directory structure and packages
+
+overwrite = False #Whether to overwrite outputs or skip them if done
+
+#Read compilation of metadata
+geometadata_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
+geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_réseau_SIG')
+
+#Create output directory
+out_dir = Path(resdir, 'reseaux_departementaux_copies')
+if not out_dir.exists():
+    out_dir.mkdir()
+
+#Output
+out_QCtab = Path(resdir, 'QC_nets.csv')
+
+def copy_net(in_row, out_dir, quiet, overwrite):
+    if not quiet:
+        print(in_row['Numéro'])
+    depdir = Path(out_dir, "D{0}_{1}".format(
+        in_row.Numéro,
+        re.sub('[-]', '_', in_row.Département)
+    ))
+
+    if not depdir.exists():
+        os.mkdir(depdir)
+
+    if (in_row["Lien local données"] != 'TBD') and (in_row['Titre du fichier'] != 'TBD'):
+        orig_dir = Path(in_row["Lien local données"]).parent
+        for in_file in getfilelist(dir=orig_dir, repattern='{0}[.][a-zA-Z]{{2,3}}'.format(
+                Path(in_row["Lien local données"]).stem)):
+            out_file = Path(depdir, Path(in_file).name)
+            if not out_file.exists() or overwrite:
+                if not quiet:
+                    print(out_file)
+                shutil.copy(in_file, out_file)
+            else:
+                if not quiet:
+                    print('{} already exists.'.format(out_file))
+        return(Path(depdir, Path(in_row["Lien local données"]).name))
+    else:
+        return(np.nan)
+
+#Define functions
+def remove_invalid_geom(ds):
+    if isinstance(ds, Path):
+        ds = str(ds)
+
+    if os.path.splitext(ds)[1] == '.shp':
+        net_ogr = ogr.Open(ds, update=1)
+        lyr = net_ogr.GetLayer()
+
+    elif os.path.splitext(ds)[1] == '.TAB':
+        driver = ogr.GetDriverByName("MapInfo File")
+        net_ogr = driver.Open(ds, 1)
+        lyr = net_ogr.GetLayer(0)
+
+    for feature in lyr:
+        geom = feature.GetGeometryRef()
+        if geom is None:
+            print('Deleting FID {}...'.format(feature.GetFID()))
+            lyr.DeleteFeature(feature.GetFID())
+        elif geom.IsValid() == False:
+            print('Deleting FID {}...'.format(feature.GetFID()))
+            lyr.DeleteFeature(feature.GetFID())
+
+    net_ogr = None
+
+def split_strip(in_record, sep=','):
+    if isinstance(in_record.split(sep), list):
+        return([cat.strip() for cat in in_record.split(',')])
+    else:
+        in_record.strip()
+
+def check_colmatch(in_colrecord, net):
+    if pd.isnull(in_colrecord):
+        return(True)
+    else:
+        return(all([(col in net.columns)
+                    for col in split_strip(in_colrecord)]))
+
+
+#in_row = geometadata_pd.iloc[0,:]
+def QC_row_metadata(in_row, in_dict):
+    print(in_row['Numéro'])
+
+    if not pd.isnull(in_row['data_copy_path']):
+        #Read in network feature class
+        try:
+            net = gpd.read_file(in_row["data_copy_path"], encodings=in_row['Encodage'])
+        except:
+            # Clean network of invalid geometries first
+            remove_invalid_geom(in_row['data_copy_path'])
+            # Then read it
+            net = gpd.read_file(in_row["data_copy_path"], encodings=in_row['Encodage'])
+
+        #Format categories of ecoulement from metadata table
+        ce_cats_raw = in_row["Catégories de l'attribut désignant le type d'écoulement"]
+        if not pd.isnull(ce_cats_raw):
+            if ";" in ce_cats_raw:
+                unique_typecoul_tab = split_strip(ce_cats_raw, ';')
+            else:
+                unique_typecoul_tab = split_strip(ce_cats_raw)
+
+        type_ecoul_colname_tab = in_row["Nom de l'attribut désignant le type d'écoulement"]
+
+        in_dict[in_row.Numéro] = [
+            #Number of features match
+            "{0}: {1}-{2}".format(
+                in_row["Nombre total d'écoulements référencés"] == len(net),
+                in_row["Nombre total d'écoulements référencés"],
+                len(net)
+            ),
+            # all columns in network are recorded
+            [col for col in net.columns if ((col != 'geometry') and (not col in in_row["Nom d'attributs"]))],
+            # cours d'eau attribute name exists
+            type_ecoul_colname_tab in net.columns or pd.isnull(type_ecoul_colname_tab),
+            # cours d'eau categories match
+            [cat for cat in net[type_ecoul_colname_tab].unique() if (not cat in unique_typecoul_tab)] \
+                if not pd.isnull(in_row["Catégories de l'attribut désignant le type d'écoulement"]) \
+                else True,
+
+            check_colmatch(in_row["Nom de l'attribut auxiliaire désignant le type d'écoulement"], net),
+            check_colmatch(in_row["Nom de l'attribut désignant le régime hydrologique"], net),
+            check_colmatch(in_row["Nom de l'attribut désignant la méthode d'identification de l'écoulement"], net),
+            check_colmatch(in_row["Nom de l'attribut désignant la source de la modification, de la suppression du tronçon BD TOPO®, ou de l’ajout d’un nouveau tronçon"], net),
+            check_colmatch(in_row["Nom de l'attribut désignant la date de l'identification du type d'écoulement"], net)
+        ]
+    else:
+        return(np.nan)
+
+
+#Copy data to results folder for manipulation
+geometadata_pd['data_copy_path'] = geometadata_pd.apply(copy_net,
+                                                        out_dir=out_dir,
+                                                        quiet=True,
+                                                        overwrite=False,
+                                                        axis=1)
+
+#QC metadata
+if not out_QCtab.exists() or overwrite:
+    QC_dict = defaultdict(list)
+    geometadata_QCed_pd = geometadata_pd.apply(QC_row_metadata,
+                                               in_dict = QC_dict,
+                                               axis=1)
+
+    QC_pd = pd.DataFrame.from_dict(QC_dict, orient='index')
+    QC_pd.columns = ['n_match',
+                     'col_match',
+                     'ce_colname_match',
+                     'ce_cats_match',
+                     'auxi_colname_match',
+                     'regime_colname_match',
+                     'natident_colname_match',
+                     'origmodif_colname_match',
+                     'dateident_colname_match'
+                     ]
+    QC_pd.to_csv(out_QCtab)
+
+#Check for typos, etc.
+uvals = geometadata_pd.apply(lambda col: col.unique())
+#uvals['Commentaire']
+
+
+
+
+
+

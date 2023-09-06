@@ -1,18 +1,17 @@
-import warnings
-
-import numpy as np
-
-warnings.simplefilter(action='ignore', category=FutureWarning) #TO GET READ OF ITERITEMS SPAM FROM PANDAS
-
 from datetime import date
+from collections import defaultdict
+import geopandas as gpd
 from inspect import getsourcefile
 import itertools
+import numpy as np
 import os
+from osgeo import gdal, osr, ogr
 import pandas as pd #Rpd.read_excel equires optional dependency openpyxl
 from pathlib import Path
 import pip_system_certs.wrapt_requests
 import re
 import requests
+import shapefile
 import shutil
 import sys
 import urllib3
@@ -20,6 +19,7 @@ import xmltodict
 from flatten_dict import flatten #INstall from https://github.com/ianlini/flatten-dict #github connection solved with https://stackoverflow.com/questions/72486457/fatal-unable-to-connect-to-github-com-github-com0-140-82-121-4-errno-unkno #Then .\pyenv\python.exe -m pip install git+git://github.com/ianlini/flatten-dict.git
 import zipfile
 
+sys.stdout.reconfigure(encoding='utf-8')
 
 #Utility functions
 def get_root_fromsrcdir():
