@@ -8,6 +8,7 @@ geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_ré
 
 #Create output directory
 out_dir = Path(resdir, 'reseaux_departementaux_copies')
+out_net_path = Path(resdir, 'carto_loi_eau_france.gpkg')
 
 #Copy all layers for renaming
 net_copylist = getfilelist(out_dir, repattern='.*_copie[.](TAB|shp)')
@@ -32,10 +33,10 @@ def format_net(in_net_path, in_geometadata_pd):
         net = gpd.read_file(in_net_path, encodings=row_metadata['Encodage'])
         #gpkg requires fid column to be int - sometimes read in as float from shp
         if 'fid' in net.columns:
-            if not pd.api.types.is_integer_dtype(net.fid):
-                net['fid'] = net['fid'].astype(int)
             if any(net.fid.duplicated()):
                 net.rename(columns={"fid":"fid_orig"}, inplace=True)
+            elif not pd.api.types.is_integer_dtype(net.fid):
+                net['fid'] = net['fid'].astype(int)
         try:
             net.to_file(out_file, encoding='utf-8')
         #Some layers have mixed encoding
@@ -81,8 +82,8 @@ def format_net(in_net_path, in_geometadata_pd):
     }
 
     for k,v in renaming_dict.items():
-        if not pd.isnull(row_metadata[k].iloc[0]):
-            colnames_orig_list = split_strip(row_metadata[k].iloc[0])
+        if not pd.isnull(row_metadata[k]):
+            colnames_orig_list = split_strip(row_metadata[k])
             for i in range(len(colnames_orig_list)):
                 if i == 0:
                     net[v] = net[colnames_orig_list[i].lower()]
@@ -104,11 +105,11 @@ def format_net(in_net_path, in_geometadata_pd):
     def recat_gpdcol(in_row_net, in_row_metadata, in_dict_recat):
         for cats_orig_colname, cat_new in in_dict_recat.items():
             #print(in_row_net['TYPE_ECOUL'])
-            if not pd.isnull(in_row_metadata[cats_orig_colname].iloc[0]):
+            if not pd.isnull(in_row_metadata[cats_orig_colname]):
                 cats_orig = [
                     cat if cat != 'NULL' else np.nan
                     for cat in split_strip(
-                        str(in_row_metadata[cats_orig_colname].iloc[0]),
+                        str(in_row_metadata[cats_orig_colname]),
                         sep=';')
                 ]
                 #print(cats_orig)
@@ -138,6 +139,23 @@ for net_path in net_copylist:
                )
 
 #Merge into one layer
+sel_cols = ["type_stand","type_aux","regime","regime2", "nat_id", "nat_id2", "orig_mo","orig_mo2", "orig_mo3",
+            "date_id","fid","id", "id_loc", "code_hydro","orig_layer"
+            ]
+if not Path(out_net_path).exists() or overwrite:
+    net_editlist = getfilelist(out_dir, '.*_edit[.]gpkg')
+    net_merged = pd.concat(
+        net_path_sub.loc[:,net_path_sub.columns.isin(sel_cols)]
+        for net_path_sub in
+        [gpd.read_file(net_path).assign(orig_layer = Path(net_path).stem) for net_path in net_editlist]
+    ).\
+        pipe(gpd.GeoDataFrame)
+    net_merged.to_file(Path(out_net_path))
+
+
+# for net_path in net_editlist[0]:
+#     gpd.read_file(Path(net_path))
+
 
 
 #Intersect with administrative boundaries
