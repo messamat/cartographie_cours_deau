@@ -1,3 +1,6 @@
+#To install new module in venv: .\pyenv\python.exe -m pip install
+
+import chardet
 from datetime import date
 from collections import defaultdict
 import geopandas as gpd
@@ -9,6 +12,7 @@ from osgeo import gdal, osr, ogr
 import pandas as pd #Rpd.read_excel equires optional dependency openpyxl
 from pathlib import Path
 import pip_system_certs.wrapt_requests
+import pygeoops
 import re
 import requests
 import shapefile
@@ -89,6 +93,22 @@ def flatten(d, uid=0):
         else:
             out[key + str(uid) + '_'] = val
     return out
+
+def split_strip(in_record, sep=','):
+    if isinstance(in_record.split(sep), list):
+        return([cat.strip() for cat in in_record.split(sep)])
+    else:
+        in_record.strip()
+
+def convert_bytes_to_na(in_gpd):
+    for col in np.where(in_gpd.dtypes == 'object')[0]:
+        for i in range(len(in_gpd)):
+            record =in_gpd.iloc[i, col]
+            if not pd.isnull(record):
+                if isinstance(record, bytes):
+                    # print(col)
+                    in_gpd.iloc[i, col] = np.nan
+    return(in_gpd)
 
 # Regex search dictionary keys and return values associated with matches
 # max_i limits the number of matches

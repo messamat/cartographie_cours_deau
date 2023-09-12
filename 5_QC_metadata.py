@@ -14,6 +14,10 @@ if not out_dir.exists():
 #Output
 out_QCtab = Path(resdir, 'QC_nets.csv')
 
+yonne_out_mergedfile = geometadata_pd[geometadata_pd['Numéro'] == 89]['Lien local données'].iloc[0]
+yonne_in_dir = Path(geometadata_pd[geometadata_pd['Numéro'] == 89]['Lien local données'].iloc[0]).parent
+yonne_in_filepaths = getfilelist(yonne_in_dir, '.*[.](TAB|shp)$')
+
 def copy_net(in_row, out_dir, quiet, overwrite):
     if not quiet:
         print(in_row['Numéro'])
@@ -27,9 +31,13 @@ def copy_net(in_row, out_dir, quiet, overwrite):
 
     if (in_row["Lien local données"] != 'TBD') and (in_row['Titre du fichier'] != 'TBD'):
         orig_dir = Path(in_row["Lien local données"]).parent
-        for in_file in getfilelist(dir=orig_dir, repattern='{0}[.][a-zA-Z]{{2,3}}'.format(
-                Path(in_row["Lien local données"]).stem)):
-            out_file = Path(depdir, Path(in_file).name)
+
+        for in_file in getfilelist(dir=orig_dir,
+                                   repattern='^{0}[.][a-zA-Z]{{2,3}}$'.format(Path(in_row["Lien local données"]).stem)):
+            out_file = Path(depdir,
+                            '{0}_copie{1}'.format(Path(in_file).stem,
+                                                  Path(in_file).suffix)
+                            )
             if not out_file.exists() or overwrite:
                 if not quiet:
                     print(out_file)
@@ -37,7 +45,14 @@ def copy_net(in_row, out_dir, quiet, overwrite):
             else:
                 if not quiet:
                     print('{} already exists.'.format(out_file))
-        return(Path(depdir, Path(in_row["Lien local données"]).name))
+
+        return(
+            Path(depdir,
+                    '{0}{1}'.format(
+                        out_file.stem,
+                        Path(in_row["Lien local données"]).suffix)
+                    )
+        )
     else:
         return(np.nan)
 
@@ -66,12 +81,6 @@ def remove_invalid_geom(ds):
 
     net_ogr = None
 
-def split_strip(in_record, sep=','):
-    if isinstance(in_record.split(sep), list):
-        return([cat.strip() for cat in in_record.split(',')])
-    else:
-        in_record.strip()
-
 def check_colmatch(in_colrecord, net):
     if pd.isnull(in_colrecord):
         return(True)
@@ -79,8 +88,7 @@ def check_colmatch(in_colrecord, net):
         return(all([(col in net.columns)
                     for col in split_strip(in_colrecord)]))
 
-
-#in_row = geometadata_pd.iloc[0,:]
+#in_row = geometadata_pd.iloc[55,:]
 def QC_row_metadata(in_row, in_dict):
     print(in_row['Numéro'])
 
@@ -129,20 +137,31 @@ def QC_row_metadata(in_row, in_dict):
     else:
         return(np.nan)
 
+#Format Yonne — merge layers
+if not Path(yonne_out_mergedfile).exists() or overwrite:
+    pd.concat(
+        [convert_bytes_to_na(
+            gpd.read_file(file_path,
+                          encoding=geometadata_pd[geometadata_pd['Numéro'] == 89]['Encodage'].iloc[0]).\
+            assign(status_lyr = Path(file_path).stem)
+        )
+         for file_path in yonne_in_filepaths]
+    ).pipe(gpd.GeoDataFrame).\
+        to_file(Path(yonne_out_mergedfile))
 
 #Copy data to results folder for manipulation
 geometadata_pd['data_copy_path'] = geometadata_pd.apply(copy_net,
                                                         out_dir=out_dir,
-                                                        quiet=True,
-                                                        overwrite=False,
+                                                        quiet=False,
+                                                        overwrite=overwrite,
                                                         axis=1)
 
 #QC metadata
 if not out_QCtab.exists() or overwrite:
     QC_dict = defaultdict(list)
     geometadata_QCed_pd = geometadata_pd.apply(QC_row_metadata,
-                                               in_dict = QC_dict,
-                                               axis=1)
+                                                           in_dict = QC_dict,
+                                                           axis=1)
 
     QC_pd = pd.DataFrame.from_dict(QC_dict, orient='index')
     QC_pd.columns = ['n_match',
