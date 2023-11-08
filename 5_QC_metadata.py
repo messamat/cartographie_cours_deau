@@ -14,11 +14,13 @@ if not out_dir.exists():
 #Output
 out_QCtab = Path(resdir, 'QC_nets.csv')
 
-yonne_out_mergedfile = geometadata_pd[geometadata_pd['Numéro'] == 89]['Lien local données'].iloc[0]
-yonne_in_dir = Path(geometadata_pd[geometadata_pd['Numéro'] == 89]['Lien local données'].iloc[0]).parent
+yonne_out_mergedfile = Path(rootdir,
+                            geometadata_pd[geometadata_pd['Numéro'] == 89]['Lien local données'].iloc[0])
+yonne_in_dir = Path(rootdir,
+                    Path(geometadata_pd[geometadata_pd['Numéro'] == 89]['Lien local données'].iloc[0]).parent)
 yonne_in_filepaths = getfilelist(yonne_in_dir, '.*[.](TAB|shp)$')
 
-def copy_net(in_row, out_dir, quiet, overwrite):
+def copy_net(in_row, in_rootdir, out_dir, quiet, overwrite):
     if not quiet:
         print(in_row['Numéro'])
     depdir = Path(out_dir, "D{0}_{1}".format(
@@ -30,7 +32,10 @@ def copy_net(in_row, out_dir, quiet, overwrite):
         os.mkdir(depdir)
 
     if (in_row["Lien local données"] != 'TBD') and (in_row['Titre du fichier'] != 'TBD'):
-        orig_dir = Path(in_row["Lien local données"]).parent
+        if in_rootdir is not None:
+            orig_dir = Path(in_rootdir, Path(in_row["Lien local données"]).parent)
+        else:
+            orig_dir = Path(in_row["Lien local données"]).parent
 
         for in_file in getfilelist(dir=orig_dir,
                                    repattern='^{0}[.][a-zA-Z]{{2,3}}$'.format(Path(in_row["Lien local données"]).stem)):
@@ -48,10 +53,10 @@ def copy_net(in_row, out_dir, quiet, overwrite):
 
         return(
             Path(depdir,
-                    '{0}{1}'.format(
-                        out_file.stem,
-                        Path(in_row["Lien local données"]).suffix)
-                    )
+                 '{0}{1}'.format(
+                     out_file.stem,
+                     Path(in_row["Lien local données"]).suffix)
+                 )
         )
     else:
         return(np.nan)
@@ -142,15 +147,16 @@ if not Path(yonne_out_mergedfile).exists() or overwrite:
     pd.concat(
         [convert_bytes_to_na(
             gpd.read_file(file_path,
-                          encoding=geometadata_pd[geometadata_pd['Numéro'] == 89]['Encodage'].iloc[0]).\
-            assign(status_lyr = Path(file_path).stem)
+                          encoding=geometadata_pd[geometadata_pd['Numéro'] == 89]['Encodage'].iloc[0]). \
+                assign(status_lyr = Path(file_path).stem)
         )
-         for file_path in yonne_in_filepaths]
-    ).pipe(gpd.GeoDataFrame).\
+            for file_path in yonne_in_filepaths]
+    ).pipe(gpd.GeoDataFrame). \
         to_file(Path(yonne_out_mergedfile))
 
 #Copy data to results folder for manipulation
 geometadata_pd['data_copy_path'] = geometadata_pd.apply(copy_net,
+                                                        in_rootdir=rootdir,
                                                         out_dir=out_dir,
                                                         quiet=False,
                                                         overwrite=overwrite,
@@ -160,8 +166,8 @@ geometadata_pd['data_copy_path'] = geometadata_pd.apply(copy_net,
 if not out_QCtab.exists() or overwrite:
     QC_dict = defaultdict(list)
     geometadata_QCed_pd = geometadata_pd.apply(QC_row_metadata,
-                                                           in_dict = QC_dict,
-                                                           axis=1)
+                                               in_dict = QC_dict,
+                                               axis=1)
 
     QC_pd = pd.DataFrame.from_dict(QC_dict, orient='index')
     QC_pd.columns = ['n_match',
