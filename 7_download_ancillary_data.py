@@ -1,7 +1,11 @@
 import os
 import codecs
 import bs4 as BeautifulSoup
+import py7zr
+import zipfile
+
 from setup_classement import  *
+
 out_dir = os.path.join(datdir, 'données_auxiliaires')
 if not os.path.exists(out_dir):
     os.mkdir(out_dir)
@@ -23,9 +27,9 @@ def standard_download_zip(in_url, out_rootdir, out_name):
         print("{} already exists. Skipping...".format(unzipped_path))
 
 #Download administrative boundaries
-standard_download_zip(in_url=("https://wxs.ign.fr/x02uy2aiwjo9bm8ce5plwqmr/telechargement/prepackage/ADMINEXPRESS_SHP_WGS"
-                              "84G_PACK_2023-05-04$ADMIN-EXPRESS_3-2__SHP_WGS84G_FRA_2023-05-03/file/ADMIN-EXPRESS_3-2__"
-                              "SHP_WGS84G_FRA_2023-05-03.7z"),
+standard_download_zip(in_url=("https://wxs.ign.fr/x02uy2aiwjo9bm8ce5plwqmr/telechargement/prepackage/"
+                              "ADMINEXPRESS_SHP_TERRITOIRES_PACK_2023-10-16$ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16/f"
+                              "ile/ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16.7z"),
                       out_rootdir=out_dir,
                       out_name="admin_express")
 
@@ -39,11 +43,23 @@ standard_download_zip(in_url=("https://services.sandre.eaufrance.fr/telechargeme
                       out_rootdir=out_dir,
                       out_name="topage")
 
+#Download HydroBASINS
+standard_download_zip(in_url=("https://data.hydrosheds.org/file/hydrobasins/customized_with_lakes/"
+                              "hybas_lake_eu_lev01-12_v1c.zip"),
+                      out_rootdir=out_dir,
+                      out_name="hydrosheds")
+
 #Download Carthage 2014 ------------------------------------------------------------------------------------------------
 """Download from http://services.sandre.eaufrance.fr/telechargement/geo/ETH/BDCarthage/FXX/2014/"""
 standard_download_zip(
     in_url=("http://services.sandre.eaufrance.fr/telechargement/geo/ETH/BDCarthage/FXX/2014/arcgis/FranceEntiere/"
                    "COURS_D_EAU_FXX-shp.zip"),
+    out_rootdir=out_dir,
+    out_name="carthage")
+
+standard_download_zip(
+    in_url=("http://services.sandre.eaufrance.fr/telechargement/geo/ETH/BDCarthage/FXX/2014/arcgis/FranceEntiere/"
+            "TRONCON_HYDROGRAPHIQUE_FXX-shp.zip"),
     out_rootdir=out_dir,
     out_name="carthage")
 
@@ -127,7 +143,7 @@ soup = BeautifulSoup.BeautifulSoup(response.text, "html.parser")
 for res in soup.findAll('a'):  # images, css, etc..
     if res.has_attr('href'):  # check inner tag (file object) MUST exists
         if re.search("BDFORETV2[-]PACK_14[-]09[-]2022.*[.]7z$", res['href']):
-            #print(res['href'])
+            print(res['href'])
             standard_download_zip(
                 in_url=res['href'],
                 out_rootdir=out_dir,
@@ -165,6 +181,7 @@ for res in soup.findAll('a'):  # images, css, etc..
                 out_rootdir=out_dir,
                 out_name="bdalti")
 del session, response, soup
+
 
 #---- Densité de population -------------------------------------------------------------------------------------------
 #Revenus, pauvreté et niveau de vie en 2019 - Données carroyées (middle year of 2015-2023)
@@ -316,6 +333,24 @@ standard_download_zip(
 
 #Mean bed substrate size - RHT  ----------------------------------------------------------------------------------------
 #Got data from Hervé Pella
+
+#################################### UNZIP ANCILLARY DATA ##############################################################
+#Not working for now -- will work on it
+# files_tounzip = []
+# for ext in ['zip', '7z']:
+#     files_tounzip.extend(Path(out_dir).rglob('*.{}'.format(ext)))
+# for f in files_tounzip:
+#     print(f)
+#     if f.suffix == '.7z':
+#         with py7zr.SevenZipFile(f, mode='r') as z:
+#             if not os.path.exists(os.path.split(str(f))[0]):
+#                 z.extractall(os.path.split(str(f))[0])
+#     elif f.suffix == '.zip':
+#         with zipfile.ZipFile(f) as z:
+#             if not os.path.exists(os.path.split(str(f))[0]):
+#                 z.extractall(path=os.path.split(str(f))[0])
+#     else:
+#         print("{} is neither a 7z file nor a zip file".format(f))
 
 ############ POTENTIAL
 #Theia Thisme data: https://thisme.cines.teledetection.fr/home
