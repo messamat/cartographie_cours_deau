@@ -18,10 +18,10 @@ def standard_download_zip(in_url, out_rootdir, out_name):
     zip_path = os.path.join(download_dir, os.path.split(in_url)[1])
     unzipped_path = os.path.splitext(zip_path)[0]
     if not (os.path.exists(zip_path) or os.path.exists(unzipped_path)):
+        print(f"Downloading {Path(in_url).name}")
         response = requests.get(in_url, verify=False)
         with open(zip_path, "wb") as file:
             # get request
-            print(f"Downloading {Path(in_url).name}")
             file.write(response.content)
     else:
         print("{} already exists. Skipping...".format(unzipped_path))
@@ -131,6 +131,17 @@ for region in [11, 24, 27, 28, 32, 44, 52, 53, 75, 76, 84, 93]:
         out_rootdir=out_dir,
         out_name="bdtopo233")
 
+#Download BD topo 2019 (pack 191) for batiments (to spread population) ------------------------------------------------------------
+"""Download from https://geoservices.ign.fr/bdtopo#telechargement2015"""
+for i in range(1,96):
+    if i != 20:
+        standard_download_zip(
+            in_url=("https://wxs.ign.fr/859x8t863h6a09o9o6fy4v60/telechargement/prepackage/"
+                    "BDTOPOV3-TOUSTHEMES-DEPARTEMENT-PACK_191$BDTOPO_3-0_TOUSTHEMES_SHP_LAMB93_D0{0}_2019-03-15/file/"
+                    "BDTOPO_3-0_TOUSTHEMES_SHP_LAMB93_D0{0}_2019-03-15.7z").format(str(i).zfill(2)),
+            out_rootdir=out_dir,
+            out_name="bdtopo191")
+
 #---- Land cover -------------------------------------------------------------------------------------------------------
 #BD foret---------------------------------------------------------------------------------------------------------------------
 """https://geoservices.ign.fr/bdforet"""
@@ -140,16 +151,20 @@ session = requests.Session()
 # ... whatever other requests config you need here
 response = session.get(in_url, verify=False)
 soup = BeautifulSoup.BeautifulSoup(response.text, "html.parser")
+corsica_urls = ["https://wxs.ign.fr/24pq1j404fo3y3nhf6rc9i1z/telechargement/inspire/BDFORETV2-PACK_14-09-2022$BDFORET_2-0__SHP_LAMB93_{}".format(suffix) for suffix in
+                 ["D02A_2017-05-10/file/BDFORET_2-0__SHP_LAMB93_D02A_2017-05-10.7z",
+                  "D02B_2016-02-16/file/BDFORET_2-0__SHP_LAMB93_D02B_2016-02-16.7z"]
+                ]
 for res in soup.findAll('a'):  # images, css, etc..
     if res.has_attr('href'):  # check inner tag (file object) MUST exists
         if re.search("BDFORETV2[-]PACK_14[-]09[-]2022.*[.]7z$", res['href']):
             print(res['href'])
-            standard_download_zip(
-                in_url=res['href'],
-                out_rootdir=out_dir,
-                out_name="bdforet_v2")
+            if not res['href'] in corsica_urls:
+                standard_download_zip(
+                    in_url=res['href'],
+                    out_rootdir=out_dir,
+                    out_name="bdforet_v2")
 del session, response, soup
-
 
 #CES Occupation des sols (Inglada et al. 2017)------------------------------------------------------------------------------
 "https://www.theia-land.fr/product/carte-doccupation-des-sols-de-la-france-metropolitaine/"
@@ -190,6 +205,12 @@ standard_download_zip(
     in_url="https://www.insee.fr/fr/statistiques/fichier/7655503/Filosofi2019_carreaux_nivNaturel_shp.zip",
     out_rootdir=out_dir,
     out_name="insee_pop")
+
+standard_download_zip(
+    in_url="https://www.insee.fr/fr/statistiques/fichier/7655475/Filosofi2019_carreaux_200m_shp.zip",
+    out_rootdir=out_dir,
+    out_name="insee_pop")
+
 
 #---- Irrigation par commune -------------------------------------------------------------------------------------------
 #Recensement agricole par commune 2020: https://stats.agriculture.gouv.fr/cartostat/#bbox=252869,6953760,876913,518649&c=indicator&i=cult_2020_2.partirrig20_&selcodgeo=17336&t=A02&view=map11
