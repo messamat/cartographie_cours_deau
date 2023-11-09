@@ -23,6 +23,11 @@ import xmltodict
 from flatten_dict import flatten #INstall from https://github.com/ianlini/flatten-dict #github connection solved with https://stackoverflow.com/questions/72486457/fatal-unable-to-connect-to-github-com-github-com0-140-82-121-4-errno-unkno #Then .\pyenv\python.exe -m pip install git+git://github.com/ianlini/flatten-dict.git
 import zipfile
 
+import arcpy
+from arcpy.sa import *
+arcpy.CheckOutExtension('Spatial')
+arcpy.env.overwriteOutput = True
+arcpy.env.qualifiedFieldNames = False
 sys.stdout.reconfigure(encoding='utf-8')
 
 #Utility functions

@@ -11,10 +11,10 @@ out_dir = Path(resdir, 'reseaux_departementaux_copies')
 out_net_path = Path(resdir, 'carto_loi_eau_france.gpkg')
 
 #Copy all layers for renaming
-net_copylist = getfilelist(out_dir, repattern='.*_copie[.](TAB|shp)$')
+net_copylist = getfilelist(out_dir, repattern='.*_copie[.](TAB|shp|gpkg)')
 
-in_net_path = net_copylist[93]
-in_geometadata_pd = geometadata_pd
+# in_net_path = net_copylist[93]
+# in_geometadata_pd = geometadata_pd
 def create_editable_lyr(in_copylyr, out_editlyr, in_encoding, overwrite):
     if (not Path(out_editlyr).exists()) or overwrite:
         print(out_editlyr)
@@ -149,10 +149,10 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
     else:
         print('No metadata associated with this layer. Skipping.')
 
-for net_path in net_copylist[93:94]:
+for net_path in net_copylist:
     format_net(in_net_path=net_path,
                in_geometadata_pd=geometadata_pd,
-               overwrite = overwrite
+               overwrite = False
                )
 
 
@@ -199,14 +199,14 @@ sel_cols = ["type_stand","type_aux","regime","regime2", "nat_id", "nat_id2", "or
             ]
 if not Path(out_net_path).exists() or overwrite:
     print('Merging all layers')
-    net_editlist = getfilelist(out_dir, '.*_edit[.]gpkg')
+    net_editlist = getfilelist(out_dir, '.*_edit[.]gpkg$')
+    net_gpdlist = []
+    for net_path in net_editlist:
+        print(net_path)
+        net_gpdlist.append(gpd.read_file(net_path).assign(orig_layer=Path(net_path).parent.stem))
+
     net_merged = pd.concat(
         net_path_sub.loc[:,net_path_sub.columns.isin(sel_cols)]
-        for net_path_sub in
-        [gpd.read_file(net_path).assign(orig_layer = Path(net_path).parent.stem) for net_path in net_editlist]
-    ).\
+        for net_path_sub in net_gpdlist).\
         pipe(gpd.GeoDataFrame)
     net_merged.to_file(Path(out_net_path))
-
-#Intersect with administrative boundaries
-#Intersect with hydrographic units boundaries

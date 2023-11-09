@@ -1,6 +1,6 @@
 from setup_classement import * #Get directory structure and packages
 
-overwrite = False #Whether to overwrite outputs or skip them if done
+overwrite =False #Whether to overwrite outputs or skip them if done
 
 #Read compilation of metadata
 geometadata_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
@@ -94,6 +94,9 @@ def check_colmatch(in_colrecord, net):
                     for col in split_strip(in_colrecord)]))
 
 #in_row = geometadata_pd.iloc[55,:]
+
+
+
 def QC_row_metadata(in_row, in_dict):
     print(in_row['Numéro'])
 
@@ -117,27 +120,28 @@ def QC_row_metadata(in_row, in_dict):
 
         type_ecoul_colname_tab = in_row["Nom de l'attribut désignant le type d'écoulement"]
 
+
         in_dict[in_row.Numéro] = [
-            #Number of features match
+            #Number of features match - n_match
             "{0}: {1}-{2}".format(
                 in_row["Nombre total d'écoulements référencés"] == len(net),
                 in_row["Nombre total d'écoulements référencés"],
                 len(net)
             ),
-            # all columns in network are recorded
+            # all columns in network are recorded - col_match
             [col for col in net.columns if ((col != 'geometry') and (not col in in_row["Nom d'attributs"]))],
-            # cours d'eau attribute name exists
+            # cours d'eau attribute name exists - ce_colname_match
             type_ecoul_colname_tab in net.columns or pd.isnull(type_ecoul_colname_tab),
-            # cours d'eau categories match
+            # cours d'eau categories match - ce_cats_match
             [cat for cat in net[type_ecoul_colname_tab].unique() if (not cat in unique_typecoul_tab)] \
                 if not pd.isnull(in_row["Catégories de l'attribut désignant le type d'écoulement"]) \
                 else True,
 
-            check_colmatch(in_row["Nom de l'attribut auxiliaire désignant le type d'écoulement"], net),
-            check_colmatch(in_row["Nom de l'attribut désignant le régime hydrologique"], net),
-            check_colmatch(in_row["Nom de l'attribut désignant la méthode d'identification de l'écoulement"], net),
-            check_colmatch(in_row["Nom de l'attribut désignant la source de la modification, de la suppression du tronçon BD TOPO®, ou de l’ajout d’un nouveau tronçon"], net),
-            check_colmatch(in_row["Nom de l'attribut désignant la date de l'identification du type d'écoulement"], net)
+            check_colmatch(in_row["Nom de l'attribut auxiliaire désignant le type d'écoulement"], net), #auxi_colname_match
+            check_colmatch(in_row["Nom de l'attribut désignant le régime hydrologique"], net), #'regime_colname_match'
+            check_colmatch(in_row["Nom de l'attribut désignant la méthode d'identification de l'écoulement"], net), #natident_colname_match
+            check_colmatch(in_row["Nom de l'attribut désignant la source de la modification, de la suppression du tronçon BD TOPO®, ou de l’ajout d’un nouveau tronçon"], net), #origmodif_colname_match
+            check_colmatch(in_row["Nom de l'attribut désignant la date de l'identification du type d'écoulement"], net) #dateident_colname_match
         ]
     else:
         return(np.nan)
@@ -162,6 +166,8 @@ geometadata_pd['data_copy_path'] = geometadata_pd.apply(copy_net,
                                                         overwrite=overwrite,
                                                         axis=1)
 
+
+
 #QC metadata
 if not out_QCtab.exists() or overwrite:
     QC_dict = defaultdict(list)
@@ -184,7 +190,14 @@ if not out_QCtab.exists() or overwrite:
 
 #Check for typos, etc.
 uvals = geometadata_pd.apply(lambda col: col.unique())
-#uvals['Commentaire']
+# in_row = geometadata_pd.loc[geometadata_pd.Numéro==25]
+# net = gpd.read_file(in_row["data_copy_path"].values[0], encodings=in_row['Encodage'].values[0])
+# net.columns
+# geometadata_pd.loc[geometadata_pd.Numéro==25]["Nom de l'attribut auxiliaire désignant le type d'écoulement"].values[0].split(',').
+#
+# [col for col in split_strip(geometadata_pd.loc[geometadata_pd.Numéro==25]["Nom de l'attribut auxiliaire désignant le type d'écoulement"].values[0])
+#  if col not in net.columns]
+# #uvals['Commentaire']
 
 
 
