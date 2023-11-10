@@ -180,6 +180,14 @@ for year,repo in {2018:"https://zenodo.org/records/3613415/files/Classif_Seed_0.
         out_rootdir=oso_dir,
         out_name='oso_{}'.format(year))
 
+#---- Climate ---------------------------------------------------------------------------------------------------------
+#Global aridity index
+'''Download Global Aridity Index and Potential Evapotranspiration ET0 Climate Database v2'''
+standard_download_zip(
+    in_url="https://figshare.com/ndownloader/files/34377269",
+    out_rootdir=out_dir,
+    out_name='gaiv3')
+
 #---- Topography (DEM) --------------------------------------------------------------------------------------------------------
 #Average slope. Topographic wetness index. Curvature. Upstream area
 """https://geoservices.ign.fr/bdalti"""
