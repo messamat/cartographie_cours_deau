@@ -299,7 +299,7 @@ if not os.path.exists(out_bnpe_chroniques_unzipped_path):
 
 #Can also download from Sandre
 "https://www.sandre.eaufrance.fr/atlas/srv/eng/catalog.search#/metadata/2a6fdd18-39ef-4d8a-8e84-84ef86e4a159"
-"https://services.sandre.eaufrance.fr/telechargement/geo/PRL/2022/SHP/OuvragePrel_FRA-shp.zip""
+"https://services.sandre.eaufrance.fr/telechargement/geo/PRL/2022/SHP/OuvragePrel_FRA-shp.zip"
 
 #---- Sols #----
 #Propriétés de granulométrie des sols - GlobalSoilMap-------------------------------------------------------------------
