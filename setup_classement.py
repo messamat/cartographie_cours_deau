@@ -37,8 +37,8 @@ def get_root_fromsrcdir():
 
 #Folder structure~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 rootdir = get_root_fromsrcdir()
-datdir = Path(rootdir, 'data')
-resdir = Path(rootdir, 'results')
+datdir = os.path.join(rootdir, 'data')
+resdir = os.path.join(rootdir, 'results')
 
 def getfilelist(dir, repattern=None):
     """Function to iteratively go through all subdirectories inside 'dir' path
