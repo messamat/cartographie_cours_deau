@@ -1,5 +1,4 @@
 import arcpy.analysis
-
 from setup_classement import  *
 
 anci_dir = os.path.join(datdir, "données_auxiliaires") #Ancillary data directory
@@ -45,9 +44,6 @@ bdtopo2023_dir = os.path.join(anci_dir, "bdtopo233") #233 is the version/package
 #Withdrawal points - bnpe
 withdrawal_stations_bnpe=os.path.join(anci_dir, "bnpe", "bnpe_ouvrages.csv")
 
-#GlobalSoilModel - available water capacity ############### TO FINISH
-gsm_awc_dir = os.path.join(anci_dir, "gsm")
-
 #Farm parcels - rpg
 farm_parcels = os.path.join(anci_dir, "ign_rpg", "RPG_2-0__GPKG_LAMB93_FXX_2022-01-01", "RPG",
                             "1_DONNEES_LIVRAISON_2023-08-01", "RPG_2-0_GPKG_LAMB93_FXX-2022",
@@ -61,17 +57,11 @@ bdtopo2019_dir = os.path.join(anci_dir, 'bdtopo191')
 pop_count_variable_mesh = os.path.join(anci_dir, "insee_pop", "carreaux_nivNaturel_met.shp")
 pop_count_200m_mesh = os.path.join(anci_dir, "insee_pop", "arreaux_200m_shp")
 
-
 #Hydrobiology sampling stations - naiade
 hydrobio_stations = os.path.join(anci_dir,"naiade", "stations.csv")
 
 #FLow intermittence observation network - ONDE
 onde_filelist = getfilelist(os.path.join(anci_dir, "onde"), "onde_france_[0-9]{4}[.]csv$")
-
-#Land cover - theia oso
-lc_dir = os.path.join(anci_dir, 'oso')
-lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")
-               for yr in [2018, 2019, 2020, 2021]}
 
 #Snelder intermittence
 snelder_ires = os.path.join(anci_dir, "snelder", "rhtvs2_all_phi_qclass.shp")
@@ -102,7 +92,7 @@ bdforet_bvinters_tab = os.path.join(resdir, "bdforet_fr_bvinters.csv")
 
 bdhaies_fr = os.path.join(pregdb, "bdhaies_fr")
 bdhaies_bvinters = os.path.join(pregdb, "bdhaies_bvinters")
-bdhaies_bvinters_tab = os.path.join(pregdb, "bdhaies_bvinters.csv")
+bdhaies_bvinters_tab = os.path.join(resdir, "bdhaies_bvinters.csv")
 
 irrig_coms_formatted = os.path.join(resdir, "agreste_irrig_deps_formatted.csv")
 irrig_coms_poly = os.path.join(pregdb, "communes_irrig")
@@ -371,6 +361,21 @@ if not arcpy.Exists(snelder_ires_bvinters_tab):
                               out_table=snelder_ires_bvinters_tab)
     arcpy.Delete_management(snelder_ires_bvinters)
 
+#--------------------------------- Create fish station points  ---------------------------------------------------------
+if not arcpy.Exists(fish_stations_pts):
+    arcpy.management.XYTableToPoint(in_table=fish_stations, out_feature_class=fish_stations_pts,
+                                    x_field='sta_coordonnees_x', y_field='sta_coordonnees_y',
+                                    coordinate_system=sr_template)
+
+#--------------------------------- Create hydrobiology station points  ---------------------------------------------------------
+if not arcpy.Exists(hydrobio_stations_pts):
+    hydrobio_stations_copy = os.path.join(resdir, "hydrobio_stations_nariade_copy.csv")
+    pd.read_csv(hydrobio_stations, sep=";", encoding='cp1252').to_csv(hydrobio_stations_copy, encoding='utf-8', sep=";")
+    arcpy.management.XYTableToPoint(in_table=hydrobio_stations_copy, out_feature_class=hydrobio_stations_pts,
+                                    x_field='CoordXStationMesureEauxSurface', y_field='CoordYStationMesureEauxSurface',
+                                    coordinate_system=sr_template)
+    arcpy.Delete_management(hydrobio_stations_copy)
+
 #--------------------------------- Format INSEE population data  -------------------------------------------------------
 #Filter and merge buildings
 if not arcpy.Exists(buildings_filtered_fr):
@@ -408,17 +413,106 @@ if not arcpy.Exists(buildings_filtered_fr):
 
     print("Merging all building layers...")
     arcpy.Merge_management(inputs=temp_buildings_list, output=buildings_filtered_fr)
+    arcpy.AlterField_management(buildings_filtered_fr, 'POLY_AREA',
+                                'POLY_AREA_WHOLE', 'POLY_AREA_WHOLE')
     print("Deleting temporary building layers...")
     for temp_lyr in temp_buildings_list:
         arcpy.Delete_management(temp_lyr)
 
 #Intersect buildings with variable mesh size
+pop_count_variable_mesh = os.path.join(anci_dir, "insee_pop", "carreaux_nivNaturel_met.shp")
+pop_count_200m_mesh = os.path.join(anci_dir, "insee_pop", "arreaux_200m_shp")
+buildings_popvariable =os.path.join(pregdb, "buildings_pop_nivNaturel_inters")
+if not arcpy.Exists(buildings_popvariable):
+    arcpy.Intersect_analysis([buildings_filtered_fr, pop_count_variable_mesh],
+                             out_feature_class=buildings_popvariable,
+                             join_attributes='ALL')
 
-#For residential buildings without # of households, assign based on height
+#Pre-process attributes
+arcpy.AddGeometryAttributes_management(buildings_popvariable, Geometry_Properties='AREA', Area_Unit='SQUARE_METERS')
+arcpy.AlterField_management(buildings_popvariable, 'POLY_AREA',
+                            'POLY_AREA_MESHED', 'POLY_AREA_MESHED')
 
-#For indifférencié buildings, assign 1 household?
+################################ TO RUN############################################################################
+if not 'log_total' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Compute total number of households in each quadrat
+    arcpy.AddField_management(buildings_popvariable, 'log_total', 'SHORT')
+if not 'VOLUME' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Volume of each building
+    arcpy.AddField_management(buildings_popvariable, 'VOLUME', 'FLOAT')
+if not 'avind_per_log' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Average number of individuals per housing unit in quadrat
+    arcpy.AddField_management(buildings_popvariable, 'VOLUME', 'FLOAT')
 
-#Apportion population in variable mesh census based on number of households in each building
+buildings_lgts_meshdict = defaultdict(int)
+buildings_nolgt_totalvol_meshdict = defaultdict(float)
+with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA_MESHED',
+                                                   'log_av45', 'log_45_70', 'log_70_90',
+                                                   'log_ap90', 'log_inc', 'log_total',
+                                                   'HAUTEUR', 'POLY_AREA_WHOLE', 'VOLUME',
+                                                   'avind_per_log', 'ind',
+                                                   'idcar_nat', 'NB_LOGTS'
+                                                   ]) as cursor:
+    for row in cursor:
+        if (row[0]/row[1])<0.5: #Remove parts under half of a building and compute number of housing units based on census
+            cursor.deleteRow()
+        else:
+            log_sum = row[2] + row[3] + row[4] + row[5] + row[6]
+
+            # Compute total number of households in each mesh
+            row[7] = log_sum
+
+            # Compute volume of each building
+            if row[8] > 0:
+                row[10] = row[8]*row[9] #Volume = height*surface area
+            else:
+                row[10] = 4*row[9] #If no height data is available, assign standard "hauteur au faitage" of a single-floor house
+
+            #Compute average number of individuals per housing unit in quadrat according to census
+            if log_sum > 0:
+                row[11] = row[12]/log_sum
+            cursor.updateRow(row)
+            del log_sum
+
+            #Count the total volume of buildings without a registered number of housing units in each census quadrat
+            buildings_nolgt_totalvol_meshdict[row[13]] += row[10]
+            #Count the registered number of housing units based on building attributes in each census quadrat
+            buildings_lgts_meshdict[row[13]] += row[14]
+
+#For residential buildings without # of households, assign number of housing units based on volume, the compute pop/building
+if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
+    arcpy.AddField_management(buildings_popvariable, 'NB_LOGTS_EST', 'FLOAT')
+if not 'ind_est' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
+    arcpy.AddField_management(buildings_popvariable, 'ind_est', 'FLOAT')
+
+with (arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB_LOGTS_EST', 'NB_LOGTS',
+                                                    'VOLUME', 'ind_est', 'avind_per_log']) as cursor):
+    #Adjust number of household units per building
+    if row[1] > 0: #If there are housing units in the quadrat according to the census
+        #If there are some buildings with a registered number of households in the quadrat
+        if buildings_lgts_meshdict[row[0]] > 0:
+            lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
+
+            #If total number of building-based household units exceeds that in the census,
+            #or if total number of building-based household units is inferior to that in the census and there are no
+            # buildings without household units. Adjust number of household units based on ratio.
+            if ((lgts_ratio_meshtobuildings<1) or
+                (lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] == 0)):
+                row[2] = row[3]*lgts_ratio_meshtobuildings
+            #If total number of building-based household units is inferior to that in the census
+            # and there are buildings without household units, assign units based on volume
+            elif lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] > 0:
+                row[2] = (buildings_lgts_meshdict[row[0]]-row[1])*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
+            #Otherwise, keep the same number of household units in building
+            else:
+                row[2] = row[3]
+        #If there are no buildings with a registered number of households in the quadrat
+        else:
+            #Assign units based on volume
+            row[2] = (buildings_lgts_meshdict[row[0]] - row[1]) * (row[4] / buildings_nolgt_totalvol_meshdict[row[0]])  # Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
+        cursor.updateRow(row)
+
+        #Adjust number of household units per building if there are people in the quadrat
+        if row[6] > 0:
+            row[5] = row[2]*row[6] #Individuals in building= estimated number of household units in building*average number of individuals per housing unit in quadrat
+            cursor.updateRow(row)
 
 #Check for outliers
 
@@ -428,18 +522,3 @@ if not arcpy.Exists(buildings_filtered_fr):
 
 #COnvert 200-m mesh to raster
 
-
-#--------------------------------- Create fish station points  ---------------------------------------------------------
-if not arcpy.Exists(fish_stations_pts):
-    arcpy.management.XYTableToPoint(in_table=fish_stations, out_feature_class=fish_stations_pts,
-                                    x_field='sta_coordonnees_x', y_field='sta_coordonnees_y',
-                                    coordinate_system=sr_template)
-
-#--------------------------------- Create hydrobiology station points  ---------------------------------------------------------
-if not arcpy.Exists(hydrobio_stations_pts):
-    hydrobio_stations_copy = os.path.join(resdir, "hydrobio_stations_nariade_copy.csv")
-    pd.read_csv(hydrobio_stations, sep=";", encoding='cp1252').to_csv(hydrobio_stations_copy, encoding='utf-8', sep=";")
-    arcpy.management.XYTableToPoint(in_table=hydrobio_stations_copy, out_feature_class=hydrobio_stations_pts,
-                                    x_field='CoordXStationMesureEauxSurface', y_field='CoordYStationMesureEauxSurface',
-                                    coordinate_system=sr_template)
-    arcpy.Delete_management(hydrobio_stations_copy)
