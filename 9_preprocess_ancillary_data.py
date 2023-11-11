@@ -33,6 +33,9 @@ bdcharm_dir = os.path.join(anci_dir, "bdcharm50")
 #Forest type
 bdforet_dir = os.path.join(anci_dir, "bdforet_v2")
 
+#Land cover
+lc_dir = os.path.join(anci_dir, 'oso')
+
 #Global aridity index
 gai_dir = os.path.join(anci_dir, 'gaiv3', 'Global-AI_v3_monthly')
 
@@ -101,6 +104,11 @@ bdforet_bvinters_tab = os.path.join(resdir, "bdforet_fr_bvinters.csv")
 bdhaies_fr = os.path.join(pregdb, "bdhaies_fr")
 bdhaies_bvinters = os.path.join(pregdb, "bdhaies_bvinters")
 bdhaies_bvinters_tab = os.path.join(resdir, "bdhaies_bvinters.csv")
+
+oso_veg = os.path.join(lcav_dir, 'oso_veg')
+oso_imp = os.path.join(lcav_dir, 'oso_imp')
+oso_agr = os.path.join(lcav_dir, 'oso_agr')
+oso_scr = os.path.join(lcav_dir, 'oso_scr')
 
 gai_yr = os.path.join(pregdb, "ai_v3_yrav")
 gai_summer = os.path.join(pregdb, "ai_v3_summerav")
