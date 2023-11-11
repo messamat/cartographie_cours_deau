@@ -1,6 +1,11 @@
+import fiona
+import shapely
 from setup_classement import * #Get directory structure and packages
 
 overwrite = True #Whether to overwrite outputs or skip them if done
+
+datdir = Path(datdir)
+resdir = Path(resdir)
 
 #Read compilation of metadata
 geometadata_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
@@ -11,14 +16,50 @@ out_dir = Path(resdir, 'reseaux_departementaux_copies')
 out_net_path = Path(resdir, 'carto_loi_eau_france.gpkg')
 
 #Copy all layers for renaming
-net_copylist = getfilelist(out_dir, repattern='.*_copie[.](TAB|shp|gpkg)')
+net_copylist = getfilelist(out_dir, repattern='.*_copie[.](TAB|shp|gpkg)$')
 
 # in_net_path = net_copylist[93]
 # in_geometadata_pd = geometadata_pd
 def create_editable_lyr(in_copylyr, out_editlyr, in_encoding, overwrite):
     if (not Path(out_editlyr).exists()) or overwrite:
         print(out_editlyr)
-        net = gpd.read_file(in_copylyr, encodings=in_encoding)
+        try:
+            net = gpd.read_file(in_copylyr,
+                                encoding=in_encoding.lower(),
+                                )
+        #If one of the records has single-point LineStrings, remove these individual LineStrings and re-read
+        except shapely.errors.GEOSException: #If one of the records has invalid geometry that prevents reading
+            out_fixed_net = "{0}_fixed{1}".format(os.path.splitext(in_copylyr)[0],
+                                                  os.path.splitext(in_copylyr)[1])
+            with fiona.open(in_copylyr) as input:
+                with fiona.open(out_fixed_net, 'w', 'ESRI Shapefile',
+                                input.schema.copy(), input.crs) as output:
+                    #x=0
+                    for elem in input:
+                        # GeoJSON to shapely geometry
+                        if elem['geometry'] is not None:
+                            if elem['geometry'].type == 'MultiLineString':
+                                out_coords = [l for l in elem['geometry'].coordinates if len(l) > 1]
+                                if len(out_coords) > 0:
+                                    out_type = 'MultiLineString'
+                                else:
+                                    out_type = 'LineString'
+                                out_elem=  {
+                                    'geometry': {'type':out_type,
+                                                 'coordinates': out_coords
+                                                 },
+                                    'properties': elem.properties
+                                }
+                                output.write(out_elem)
+
+                            elif elem['geometry'].type == 'LineString':
+                                if len(elem['geometry'].coordinates) > 1:
+                                    output.write(elem)
+                        #x += 1
+            net = gpd.read_file(out_fixed_net,
+                                encoding=in_encoding.lower(),
+                                )
+
         #gpkg requires fid column to be int - sometimes read in as float from shp
         if 'fid' in net.columns:
             if any(net.fid.duplicated()):
@@ -106,9 +147,6 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
                                  'Hors_département_recatégorisé': "Hors département"}
 
 
-        in_row_net = net.iloc[0,:] #np.where(net.loc[:,'type_stand'].isna())[0][0] #net.loc[np.where(net.loc[:,'type_stand'] == "NULL")[0][0],:]
-        in_row_metadata = row_metadata
-        in_dict_recat = dict_recat_type_ecoul
         def recat_gpdcol(in_row_net, in_row_metadata, in_dict_recat):
             if pd.isnull(in_row_metadata["Nom de l'attribut désignant le type d'écoulement"]):
                 return("Cours d'eau")
@@ -133,9 +171,9 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
 
 
         net.loc[:, 'type_stand'] = net.apply(recat_gpdcol,
-                                      in_row_metadata=row_metadata,
-                                      in_dict_recat=dict_recat_type_ecoul,
-                                      axis = 1)
+                                             in_row_metadata=row_metadata,
+                                             in_dict_recat=dict_recat_type_ecoul,
+                                             axis = 1)
 
         # Reproject all to the same layer 2154
         if net.crs.to_epsg() != 2514:
@@ -150,6 +188,7 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
         print('No metadata associated with this layer. Skipping.')
 
 for net_path in net_copylist:
+    #print(net_path)
     format_net(in_net_path=net_path,
                in_geometadata_pd=geometadata_pd,
                overwrite = False
@@ -210,3 +249,13 @@ if not Path(out_net_path).exists() or overwrite:
         for net_path_sub in net_gpdlist).\
         pipe(gpd.GeoDataFrame)
     net_merged.to_file(Path(out_net_path))
+
+#Create stable UID
+ce_net = os.path.join(resdir, "carto_loi_eau_france.gpkg", "main.carto_loi_eau_france")
+if 'UID_CE' not in [f.name for f in arcpy.ListFields(ce_net)]:
+    arcpy.AddField_management(in_table=ce_net, field_name='UID_CE', field_type='LONG')
+    with arcpy.da.UpdateCursor(ce_net, ['UID_CE', 'OID@']) as cursor:
+        for row in cursor:
+            row[0] = row[1]
+            cursor.updateRow(row)
+
