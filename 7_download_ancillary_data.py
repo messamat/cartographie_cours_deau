@@ -1,7 +1,7 @@
 import os
 import codecs
 import bs4 as BeautifulSoup
-import py7zr
+#import py7zr
 import zipfile
 
 from setup_classement import  *

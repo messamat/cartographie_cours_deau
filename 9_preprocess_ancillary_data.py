@@ -74,7 +74,7 @@ if not arcpy.Exists(tempgdb):
                                    out_name=os.path.split(tempgdb)[1])
 
 #Template sr
-sr_template = arcpy.Describe(coms).SpatialReference
+sr_template = arcpy.SpatialReference(2154)
 
 #Output layers
 bdalti_mosaic = os.path.join(pregdb, "bdalti_25m_mosaic")
