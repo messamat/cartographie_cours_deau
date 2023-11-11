@@ -77,10 +77,9 @@ if not arcpy.Exists(tempgdb):
                                    out_name=os.path.split(tempgdb)[1])
 
 #gdb to hold land cover statistics
-lcav_gdb = os.path.join(resdir, 'oso_lc_stats.gdb')
-if not arcpy.Exists(lcav_gdb ):
-    arcpy.CreateFileGDB_management(out_folder_path=os.path.split(lcav_gdb)[0],
-                                   out_name=os.path.split(lcav_gdb)[1])
+lcav_dir = os.path.join(resdir, 'oso_lc_stats')
+if not arcpy.Exists(lcav_dir):
+    os.mkdir(lcav_dir)
 
 #Template sr
 sr_template = arcpy.SpatialReference(2154)
@@ -226,35 +225,47 @@ if not arcpy.Exists(bdhaies_bvinters_tab):
 
 #--------------------------------- Land cover --------------------------------------------------------------------------
 #Land cover - theia oso
-lc_dir = os.path.join(anci_dir, 'oso')
-lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")
+lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")[0]
                for yr in [2018, 2019, 2020, 2021]}
 #Create dictionary of classes https://www.theia-land.fr/en/product/land-cover-map/
 lc_class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw', 7:'spoil', 8:"soy", 9:"sunfl",
               10:"corn", 11:"rice", 12:"roots", 13:"pastu", 14:"orchd", 15:"vinyd", 16:"forbr", 17:"forco",
               18:"grass", 19:"heath", 20:"rocks", 21:"beach", 22:'glasn', 23:'water'}
-for cl in lc_class_dict:
-    out_cl = os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2)))
-    start = time.time()
-    if not arcpy.Exists(out_cl):
-        (((Raster(lc_filedict[2018])==cl)
-          + (Raster(lc_filedict[2019])==cl)
-          + (Raster(lc_filedict[2020])==cl)
-          + (Raster(lc_filedict[2021])==cl)
-          )/4).save(out_cl)
-    print(time.time() - start)
 
-os.path.join(lcav_gdb, 'oso_veg')
-sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in [16,17,18,19])
+with arcpy.EnvManager(extent="36954, 1197654, 6099938, 7239968", snapRaster=lc_filedict[2018]):
+    for cl in lc_class_dict:
+        out_cl = os.path.join('D://Users//mmessa2', 'oso_cl{}.tif'.format(str(cl).zfill(2)))
+        start = time.time()
+        if not arcpy.Exists(out_cl):
+            print("Processing {}...".format(out_cl))
+            CellStatistics(in_rasters_or_constants=[(Raster(lc_filedict[2018])==cl),
+                                                    (Raster(lc_filedict[2019])==cl),
+                                                    (Raster(lc_filedict[2020])==cl),
+                                                    (Raster(lc_filedict[2021])==cl)],
+                           statistics_type='MEAN').save(out_cl)
+        print(time.time() - start)
 
-os.path.join(lcav_gdb, 'oso_imp') #
-sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in [1,2,3,4])
 
-os.path.join(lcav_gdb, 'oso_agr')
-sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(5,16))
+if not arcpy.Exists(oso_veg):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2)))
+                                 for cl in [16,17,18,19]],
+        statistics_type='SUM').save(oso_veg)
 
-os.path.join(lcav_gdb, 'oso_scr')
-sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(8,13))
+if not arcpy.Exists(oso_imp):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in [1,2,3,4]],
+        statistics_type='SUM').save(oso_imp)
+
+if not arcpy.Exists(oso_agr):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(5,16)],
+        statistics_type='SUM').save(oso_agr)
+
+if not arcpy.Exists(oso_scr):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(8,13)],
+        statistics_type='SUM').save(oso_scr)
 
 #--------------------------------- Global aridity index  ---------------------------------------------------------------
 gai_filedict = {mo: os.path.join(gai_dir, "ai_v3_{}.tif".format(str(mo).zfill(2))) for mo in range(1,13)}
@@ -495,14 +506,13 @@ if not 'VOLUME' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #V
 if not 'avind_per_log' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Average number of individuals per housing unit in quadrat
     arcpy.AddField_management(buildings_popvariable, 'avind_per_log', 'FLOAT')
 
-################################ TO RUN############################################################################
 buildings_lgts_meshdict = defaultdict(int)
 buildings_nolgt_totalvol_meshdict = defaultdict(float)
 
-with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA_MESHED',
+with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_MESHED', 'POLY_AREA_WHOLE',
                                                    'log_av45', 'log_45_70', 'log_70_90',
                                                    'log_ap90', 'log_inc', 'log_total',
-                                                   'HAUTEUR', 'POLY_AREA_WHOLE', 'VOLUME',
+                                                   'HAUTEUR', 'VOLUME',
                                                    'avind_per_log', 'ind',
                                                    'idcar_nat', 'NB_LOGTS'
                                                    ]) as cursor:
@@ -517,20 +527,20 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA
 
             # Compute volume of each building
             if row[8] > 0:
-                row[10] = row[8]*row[9] #Volume = height*surface area
+                row[9] = row[8]*row[1] #Volume = height*surface area
             else:
-                row[10] = 4*row[9] #If no height data is available, assign standard "hauteur au faitage" of a single-floor house
+                row[9] = 4*row[1] #If no height data is available, assign standard "hauteur au faitage" of a single-floor house
 
             #Compute average number of individuals per housing unit in quadrat according to census
             if log_sum > 0:
-                row[11] = row[12]/log_sum
+                row[10] = row[11]/log_sum
             cursor.updateRow(row)
             del log_sum
 
             #Count the total volume of buildings without a registered number of housing units in each census quadrat
-            buildings_nolgt_totalvol_meshdict[row[13]] += row[10]
+            buildings_nolgt_totalvol_meshdict[row[12]] += row[9]
             #Count the registered number of housing units based on building attributes in each census quadrat
-            buildings_lgts_meshdict[row[13]] += row[14]
+            buildings_lgts_meshdict[row[12]] += row[13]
 
 #For residential buildings without # of households, assign number of housing units based on volume, the compute pop/building
 if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
@@ -538,37 +548,38 @@ if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable
 if not 'ind_est' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
     arcpy.AddField_management(buildings_popvariable, 'ind_est', 'FLOAT')
 
-with (arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB_LOGTS_EST', 'NB_LOGTS',
-                                                    'VOLUME', 'ind_est', 'avind_per_log']) as cursor):
-    #Adjust number of household units per building
-    if row[1] > 0: #If there are housing units in the quadrat according to the census
-        #If there are some buildings with a registered number of households in the quadrat
-        if buildings_lgts_meshdict[row[0]] > 0:
-            lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
+with arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB_LOGTS_EST', 'NB_LOGTS',
+                                                    'VOLUME', 'ind_est', 'avind_per_log']) as cursor:
+    for row in cursor:
+        #Adjust number of household units per building
+        if row[1] > 0: #If there are housing units in the quadrat according to the census
+            #If there are some buildings with a registered number of households in the quadrat
+            if buildings_lgts_meshdict[row[0]] > 0:
+                lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
 
-            #If total number of building-based household units exceeds that in the census,
-            #or if total number of building-based household units is inferior to that in the census and there are no
-            # buildings without household units. Adjust number of household units based on ratio.
-            if ((lgts_ratio_meshtobuildings<1) or
-                (lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] == 0)):
-                row[2] = row[3]*lgts_ratio_meshtobuildings
-            #If total number of building-based household units is inferior to that in the census
-            # and there are buildings without household units, assign units based on volume
-            elif lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] > 0:
-                row[2] = (buildings_lgts_meshdict[row[0]]-row[1])*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
-            #Otherwise, keep the same number of household units in building
+                #If total number of building-based household units exceeds that in the census,
+                #or if total number of building-based household units is inferior to that in the census and there are no
+                # buildings without household units. Adjust number of household units based on ratio.
+                if ((lgts_ratio_meshtobuildings<1) or
+                    (lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] == 0)):
+                    row[2] = row[3]*lgts_ratio_meshtobuildings
+                #If total number of building-based household units is inferior to that in the census
+                # and there are buildings without household units, assign units based on volume
+                elif ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] > 0)):
+                    row[2] = (buildings_lgts_meshdict[row[0]]-row[1])*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
+                #Otherwise, keep the same number of household units in building
+                else:
+                    row[2] = row[3]
+            #If there are no buildings with a registered number of households in the quadrat
             else:
-                row[2] = row[3]
-        #If there are no buildings with a registered number of households in the quadrat
-        else:
-            #Assign units based on volume
-            row[2] = (buildings_lgts_meshdict[row[0]] - row[1]) * (row[4] / buildings_nolgt_totalvol_meshdict[row[0]])  # Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
-        cursor.updateRow(row)
-
-        #Adjust number of household units per building if there are people in the quadrat
-        if row[6] > 0:
-            row[5] = row[2]*row[6] #Individuals in building= estimated number of household units in building*average number of individuals per housing unit in quadrat
+                #Assign units based on volume
+                row[2] = row[1] * (row[4] / buildings_nolgt_totalvol_meshdict[row[0]])  # Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
             cursor.updateRow(row)
+
+            #Adjust number of household units per building if there are people in the quadrat
+            if row[6] > 0:
+                row[5] = row[2]*row[6] #Individuals in building= estimated number of household units in building*average number of individuals per housing unit in quadrat
+                cursor.updateRow(row)
 
 #Check for outliers
 
