@@ -88,6 +88,14 @@ if not arcpy.Exists(cats_hybasdeps):
 if 'POLY_AREA' not in [f.name for f in arcpy.ListFields(cats_hybasdeps)]:
     arcpy.management.AddGeometryAttributes(cats_hybasdeps, Geometry_Properties="AREA", Area_Unit='SQUARE_METERS')
 
+#Create stable UID
+if 'UID_BV' not in [f.name for f in arcpy.ListFields(cats_hybasdeps)]:
+    arcpy.AddField_management(in_table=cats_hybasdeps, field_name='UID_BV', field_type='LONG')
+    with arcpy.da.UpdateCursor(cats_hybasdeps, ['UID_BV', 'OID@']) as cursor:
+        for row in cursor:
+            row[0] = row[1]
+            cursor.updateRow(row)
+
 #------------- PREPARE NETWORKS ----------------------------------------------------------------------------------------
 #Merge BCAE
 if not arcpy.Exists(bcae_fr):
@@ -101,7 +109,7 @@ if not arcpy.Exists(bdtopo2015_fr):
 for net in [bdtopo2015_fr, bcae_fr, bdcarthage, rht]:
     root_name = os.path.split(os.path.splitext(net)[0])[1]
     out_net = os.path.join(pregdb, "{}_bvinters".format(root_name))
-    out_tab = os.path.join(resdir, "{}.csv".format(root_name))
+    out_tab = os.path.join(resdir, "{}_bvinters.csv".format(root_name))
     if not arcpy.Exists(out_net):
         print("Processing {}...".format(out_net))
         arcpy.analysis.Intersect([net, cats_hybasdeps], out_feature_class=out_net, join_attributes="ALL")
