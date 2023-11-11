@@ -8,11 +8,11 @@ from inspect import getsourcefile
 import itertools
 import numpy as np
 import os
-from osgeo import gdal, osr, ogr
+from osgeo import gdal, osr, ogr #
 import pandas as pd #Rpd.read_excel equires optional dependency openpyxl
 from pathlib import Path
-import pip_system_certs.wrapt_requests
-import pygeoops
+#import pip_system_certs.wrapt_requests
+#import pygeoops
 import re
 import requests
 import shapefile
@@ -39,6 +39,11 @@ def get_root_fromsrcdir():
 rootdir = get_root_fromsrcdir()
 datdir = os.path.join(rootdir, 'data')
 resdir = os.path.join(rootdir, 'results')
+
+if not os.path.exists(datdir):
+    os.mkdir(datdir)
+if not os.path.exists(resdir):
+    os.mkdir(resdir)
 
 def getfilelist(dir, repattern=None):
     """Function to iteratively go through all subdirectories inside 'dir' path

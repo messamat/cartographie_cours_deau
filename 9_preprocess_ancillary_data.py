@@ -83,7 +83,7 @@ if not arcpy.Exists(lcav_gdb ):
                                    out_name=os.path.split(lcav_gdb)[1])
 
 #Template sr
-sr_template = arcpy.Describe(coms).SpatialReference
+sr_template = arcpy.SpatialReference(2154)
 
 #Output layers
 bdalti_mosaic = os.path.join(pregdb, "bdalti_25m_mosaic")
