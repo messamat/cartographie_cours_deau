@@ -230,10 +230,10 @@ lc_dir = os.path.join(anci_dir, 'oso')
 lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")
                for yr in [2018, 2019, 2020, 2021]}
 #Create dictionary of classes https://www.theia-land.fr/en/product/land-cover-map/
-class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw', 7:'spoil', 8:"soy", 9:"sunfl",
+lc_class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw', 7:'spoil', 8:"soy", 9:"sunfl",
               10:"corn", 11:"rice", 12:"roots", 13:"pastu", 14:"orchd", 15:"vinyd", 16:"forbr", 17:"forco",
               18:"grass", 19:"heath", 20:"rocks", 21:"beach", 22:'glasn', 23:'water'}
-for cl in class_dict:
+for cl in lc_class_dict:
     out_cl = os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2)))
     start = time.time()
     if not arcpy.Exists(out_cl):
@@ -243,6 +243,18 @@ for cl in class_dict:
           + (Raster(lc_filedict[2021])==cl)
           )/4).save(out_cl)
     print(time.time() - start)
+
+os.path.join(lcav_gdb, 'oso_veg')
+sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in [16,17,18,19])
+
+os.path.join(lcav_gdb, 'oso_imp') #
+sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in [1,2,3,4])
+
+os.path.join(lcav_gdb, 'oso_agr')
+sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(5,16))
+
+os.path.join(lcav_gdb, 'oso_scr')
+sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(8,13))
 
 #--------------------------------- Global aridity index  ---------------------------------------------------------------
 gai_filedict = {mo: os.path.join(gai_dir, "ai_v3_{}.tif".format(str(mo).zfill(2))) for mo in range(1,13)}
@@ -477,7 +489,7 @@ arcpy.AlterField_management(buildings_popvariable, 'POLY_AREA',
                             'POLY_AREA_MESHED', 'POLY_AREA_MESHED')
 
 if not 'log_total' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Compute total number of households in each quadrat
-    arcpy.AddField_management(buildings_popvariable, 'log_total', 'SHORT')
+    arcpy.AddField_management(buildings_popvariable, 'log_total', 'FLOAT')
 if not 'VOLUME' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Volume of each building
     arcpy.AddField_management(buildings_popvariable, 'VOLUME', 'FLOAT')
 if not 'avind_per_log' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Average number of individuals per housing unit in quadrat
@@ -486,7 +498,7 @@ if not 'avind_per_log' in [f.name for f in arcpy.ListFields(buildings_popvariabl
 ################################ TO RUN############################################################################
 buildings_lgts_meshdict = defaultdict(int)
 buildings_nolgt_totalvol_meshdict = defaultdict(float)
-x=0
+
 with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA_MESHED',
                                                    'log_av45', 'log_45_70', 'log_70_90',
                                                    'log_ap90', 'log_inc', 'log_total',
@@ -495,8 +507,6 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA
                                                    'idcar_nat', 'NB_LOGTS'
                                                    ]) as cursor:
     for row in cursor:
-        print('Processing record #{}'.format(x))
-        x += 1
         if (row[0]/row[1])<0.5: #Remove parts under half of a building and compute number of housing units based on census
             cursor.deleteRow()
         else:
@@ -521,7 +531,6 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA
             buildings_nolgt_totalvol_meshdict[row[13]] += row[10]
             #Count the registered number of housing units based on building attributes in each census quadrat
             buildings_lgts_meshdict[row[13]] += row[14]
-        x+=1
 
 #For residential buildings without # of households, assign number of housing units based on volume, the compute pop/building
 if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
