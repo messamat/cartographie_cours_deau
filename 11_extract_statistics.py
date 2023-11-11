@@ -41,47 +41,55 @@ ce_net_ras25m = os.path.join(pregdb, 'carto_loi_eau_france_ras25m')
 #USe 'UID_BV'
 
 #Buffer 10 m on each side (only laterally) and rasterize buffer for streams at 10 m
+ce_buf = os.path.join(pregdb, 'carto_loi_eau_france_buf10m')
+ce_buf_ras10m = os.path.join(pregdb, 'carto_loi_eau_france_bufras10m')
 
+#Accumulate predictors-----------------------------------------------------------------------------------------------------------
+
+os.path.join(lcav_gdb, 'oso_veg')
+os.path.join(lcav_gdb, 'oso_veg_acc')
 
 #Analyze ONDE-----------------------------------------------------------------------------------------------------------
+
+
 #statistics abbrevation: data source, spatial extent, statistics
 {'slo_dg_sav': ['zonal', os.path.join(pregdb, "bdalti_25m_slope"), cats_hybasdeps, 'AVERAGE']
-,'slo_dg_uav': ['cell', os.path.join(pregdb, "bdalti_25m_slope"), ce_net_prpts, 'AVERAGE']
+,'slo_dg_uav': ['cell', os.path.join(pregdb, "bdalti_25m_slope_acc"), ce_net_prpts, 'AVERAGE']
 ,'elv_mt_rmx': ['zonal', os.path.join(pregdb, "bdalti_25m_preconditioned"), ce_net_ras25m, 'MAXIMUM'] #To compute stream gradient
 ,'elv_mt_rmn': ['zonal', os.path.join(pregdb, "bdalti_25m_preconditioned"), ce_net_ras25m, 'MINIMUM'] #To compute stream gradient
 ,'tcv_ix_rav': ['zonal', os.path.join(pregdb, "bdalti_25m_curvature_tangential"), ce_net_ras25m, 'AVERAGE']
-,'tcv_ix_uav': ['cell', os.path.join(pregdb, "bdalti_25m_curvature_tangential"), ce_net_prpts, 'AVERAGE']
+,'tcv_ix_uav': ['cell', os.path.join(pregdb, "bdalti_25m_curvature_tangential_acc"), ce_net_prpts, 'AVERAGE']
 ,'pcv_ix_rav': ['zonal', os.path.join(pregdb, "bdalti_25m_curvature_profile"), ce_net_ras25m, 'AVERAGE']
-,'pcv_ix_uav': ['cell', os.path.join(pregdb, "bdalti_25m_curvature_profile"), ce_net_prpts, 'AVERAGE']
+,'pcv_ix_uav': ['cell', os.path.join(pregdb, "bdalti_25m_curvature_profile_acc"), ce_net_prpts, 'AVERAGE']
 ,'ari_ix_syr': ['zonal', os.path.join(pregdb, "ai_v3_yrav"), cats_hybasdeps, 'AVERAGE']
 ,'ari_ix_ssu': ['zonal', os.path.join(pregdb, "ai_v3_summerav"), cats_hybasdeps, 'AVERAGE']
-,'ari_ix_uyr': ['cell', os.path.join(pregdb, "ai_v3_yrav"), ce_net_prpts, 'AVERAGE']
-,'ari_ix_usu': ['cell', os.path.join(pregdb, "ai_v3_summerav"), ce_net_prpts, 'AVERAGE']
+,'ari_ix_uyr': ['cell', os.path.join(pregdb, "ai_v3_yrav_acc"), ce_net_prpts, 'AVERAGE']
+,'ari_ix_usu': ['cell', os.path.join(pregdb, "ai_v3_summerav_acc"), ce_net_prpts, 'AVERAGE']
 ,'lc_pc_s18': ['tabulate', lc_filedict[2018], cats_hybasdeps]
-,'lc_pc_s19': ['tabulate', lc_filedict[2018], cats_hybasdeps]
-,'lc_pc_s20': ['tabulate', lc_filedict[2018], cats_hybasdeps]
-,'lc_pc_s21': ['tabulate', lc_filedict[2018], cats_hybasdeps]
-,'lc_pc_b18': []
-,'lc_pc_b19': []
-,'lc_pc_b20': []
-,'lc_pc_b21': []
-,'veg_pc_use': []
-,'wet_pc_use': []
-,'gla_pc_use': []
-,'luc_cl_umj': []
-,'urb_pc_use': []
-,'agr_pc_use': []
-,'crp_pc_use': []
-,'scr_pc_use': []
-,'vny_pc_use': []
-,'awc_mm_sav': []
-,'awc_mm_uav': []
-,'cly_pc_sav': []
-,'cly_pc_uav': []
-,'slt_pc_sav': []
-,'slt_pc_uav': []
-,'snd_pc_sav': []
-,'snd_pc_uav': []
-,'ppd_pk_sav': []
+,'lc_pc_s19': ['tabulate', lc_filedict[2019], cats_hybasdeps]
+,'lc_pc_s20': ['tabulate', lc_filedict[2020], cats_hybasdeps]
+,'lc_pc_s21': ['tabulate', lc_filedict[2021], cats_hybasdeps]
+,'lc_pc_b18': ['tabulate', lc_filedict[2018], ce_buf_ras10m]
+,'lc_pc_b19': ['tabulate', lc_filedict[2019], ce_buf_ras10m]
+,'lc_pc_b20': ['tabulate', lc_filedict[2020], ce_buf_ras10m]
+,'lc_pc_b21': ['tabulate', lc_filedict[2021], ce_buf_ras10m]
+,'veg_pc_use': ['cell', os.path.join(lcav_gdb, 'oso_veg_acc'), ce_net_prpts, 'AVERAGE']
+,'wet_pc_use': ['cell', os.path.join(lcav_gdb, 'oso_wet_acc'), ce_net_prpts, 'AVERAGE']
+,'gla_pc_use': ['cell', os.path.join(lcav_gdb, 'oso_gla_acc'), ce_net_prpts, 'AVERAGE']
+,'imp_pc_use': ['cell', os.path.join(lcav_gdb, 'oso_imp_acc'), ce_net_prpts, 'AVERAGE']
+,'agr_pc_use': ['cell', os.path.join(lcav_gdb, 'oso_agr_acc'), ce_net_prpts, 'AVERAGE']
+,'crp_pc_use': ['cell', os.path.join(lcav_gdb, 'oso_crp_acc'), ce_net_prpts, 'AVERAGE']
+,'scr_pc_use': ['cell', os.path.join(lcav_gdb, 'oso_scr_acc'), ce_net_prpts, 'AVERAGE']
+,'vny_pc_use': ['cell', os.path.join(lcav_gdb, 'oso_vny_acc'), ce_net_prpts, 'AVERAGE']
+,'ppd_pk_sav': ['zonal', os.path.join(pregdb, "bdalti_25m_slope"), cats_hybasdeps, 'AVERAGE']
 ,'ppd_pk_uav': []
 }
+
+,'awc_mm_sav': ['zonal', os.path.join(pregdb, "bdalti_25m_slope"), cats_hybasdeps, 'AVERAGE']
+,'awc_mm_uav': []
+,'cly_pc_sav': ['zonal', os.path.join(pregdb, "bdalti_25m_slope"), cats_hybasdeps, 'AVERAGE']
+,'cly_pc_uav': []
+,'slt_pc_sav': ['zonal', os.path.join(pregdb, "bdalti_25m_slope"), cats_hybasdeps, 'AVERAGE']
+,'slt_pc_uav': []
+,'snd_pc_sav': ['zonal', os.path.join(pregdb, "bdalti_25m_slope"), cats_hybasdeps, 'AVERAGE']
+,'snd_pc_uav': []
