@@ -33,6 +33,9 @@ bdcharm_dir = os.path.join(anci_dir, "bdcharm50")
 #Forest type
 bdforet_dir = os.path.join(anci_dir, "bdforet_v2")
 
+#Global aridity index
+gai_dir = os.path.join(anci_dir, 'gaiv3', 'Global-AI_v3_monthly')
+
 #Dominant soil type 1:1,000,000
 bdgsf = os.path.join(anci_dir, "bdgsf", "30169_L93", "30169_L93.shp")
 
@@ -73,6 +76,12 @@ if not arcpy.Exists(tempgdb):
     arcpy.CreateFileGDB_management(out_folder_path=os.path.split(tempgdb)[0],
                                    out_name=os.path.split(tempgdb)[1])
 
+#gdb to hold land cover statistics
+lcav_gdb = os.path.join(resdir, 'oso_lc_stats.gdb')
+if not arcpy.Exists(lcav_gdb ):
+    arcpy.CreateFileGDB_management(out_folder_path=os.path.split(lcav_gdb)[0],
+                                   out_name=os.path.split(lcav_gdb)[1])
+
 #Template sr
 sr_template = arcpy.Describe(coms).SpatialReference
 
@@ -93,6 +102,9 @@ bdforet_bvinters_tab = os.path.join(resdir, "bdforet_fr_bvinters.csv")
 bdhaies_fr = os.path.join(pregdb, "bdhaies_fr")
 bdhaies_bvinters = os.path.join(pregdb, "bdhaies_bvinters")
 bdhaies_bvinters_tab = os.path.join(resdir, "bdhaies_bvinters.csv")
+
+gai_yr = os.path.join(pregdb, "ai_v3_yrav")
+gai_summer = os.path.join(pregdb, "ai_v3_summerav")
 
 irrig_coms_formatted = os.path.join(resdir, "agreste_irrig_deps_formatted.csv")
 irrig_coms_poly = os.path.join(pregdb, "communes_irrig")
@@ -118,6 +130,7 @@ fish_stations_pts = os.path.join(pregdb, 'fish_stations_aspe')
 hydrobio_stations_pts = os.path.join(pregdb, "hydrobio_stations_naiade")
 
 buildings_filtered_fr = os.path.join(pregdb, "buildings_filtered_fr")
+buildings_popvariable =os.path.join(pregdb, "buildings_pop_nivNaturel_inters")
 
 #--------------------------------- DEM - BDALTI ------------------------------------------------------------------------
 #Based on metadata from https://geoservices.ign.fr/documentation/donnees/alti/bdalti
@@ -210,6 +223,39 @@ if not arcpy.Exists(bdhaies_bvinters_tab):
     arcpy.CopyRows_management(in_rows=bdhaies_bvinters,
                               out_table=bdhaies_bvinters_tab)
     arcpy.Delete_management(bdhaies_bvinters)
+
+#--------------------------------- Land cover --------------------------------------------------------------------------
+#Land cover - theia oso
+lc_dir = os.path.join(anci_dir, 'oso')
+lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")
+               for yr in [2018, 2019, 2020, 2021]}
+#Create dictionary of classes https://www.theia-land.fr/en/product/land-cover-map/
+class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw', 7:'spoil', 8:"soy", 9:"sunfl",
+              10:"corn", 11:"rice", 12:"roots", 13:"pastu", 14:"orchd", 15:"vinyd", 16:"forbr", 17:"forco",
+              18:"grass", 19:"heath", 20:"rocks", 21:"beach", 22:'glasn', 23:'water'}
+for cl in class_dict:
+    out_cl = os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2)))
+    start = time.time()
+    if not arcpy.Exists(out_cl):
+        (((Raster(lc_filedict[2018])==cl)
+          + (Raster(lc_filedict[2019])==cl)
+          + (Raster(lc_filedict[2020])==cl)
+          + (Raster(lc_filedict[2021])==cl)
+          )/4).save(out_cl)
+    print(time.time() - start)
+
+#--------------------------------- Global aridity index  ---------------------------------------------------------------
+gai_filedict = {mo: os.path.join(gai_dir, "ai_v3_{}.tif".format(str(mo).zfill(2))) for mo in range(1,13)}
+
+with arcpy.EnvManager(extent="-5, 42, 9, 52", snapRaster=gai_filedict[1]):
+    if not arcpy.Exists(gai_yr):
+        CellStatistics(in_rasters_or_constants=list(gai_filedict.values()),
+                       statistics_type='MEAN'
+                       ).save(gai_yr)
+    if not arcpy.Exists(gai_summer):
+        CellStatistics(in_rasters_or_constants=[gai_filedict[mo] for mo in [7,8,9]],
+                       statistics_type='MEAN'
+                       ).save(gai_summer)
 
 #--------------------------------- Get % irrigated area by commune -----------------------------------------------------
 if not arcpy.Exists(irrig_coms_poly):
@@ -420,9 +466,6 @@ if not arcpy.Exists(buildings_filtered_fr):
         arcpy.Delete_management(temp_lyr)
 
 #Intersect buildings with variable mesh size
-pop_count_variable_mesh = os.path.join(anci_dir, "insee_pop", "carreaux_nivNaturel_met.shp")
-pop_count_200m_mesh = os.path.join(anci_dir, "insee_pop", "arreaux_200m_shp")
-buildings_popvariable =os.path.join(pregdb, "buildings_pop_nivNaturel_inters")
 if not arcpy.Exists(buildings_popvariable):
     arcpy.Intersect_analysis([buildings_filtered_fr, pop_count_variable_mesh],
                              out_feature_class=buildings_popvariable,
@@ -433,16 +476,17 @@ arcpy.AddGeometryAttributes_management(buildings_popvariable, Geometry_Propertie
 arcpy.AlterField_management(buildings_popvariable, 'POLY_AREA',
                             'POLY_AREA_MESHED', 'POLY_AREA_MESHED')
 
-################################ TO RUN############################################################################
 if not 'log_total' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Compute total number of households in each quadrat
     arcpy.AddField_management(buildings_popvariable, 'log_total', 'SHORT')
 if not 'VOLUME' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Volume of each building
     arcpy.AddField_management(buildings_popvariable, 'VOLUME', 'FLOAT')
 if not 'avind_per_log' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Average number of individuals per housing unit in quadrat
-    arcpy.AddField_management(buildings_popvariable, 'VOLUME', 'FLOAT')
+    arcpy.AddField_management(buildings_popvariable, 'avind_per_log', 'FLOAT')
 
+################################ TO RUN############################################################################
 buildings_lgts_meshdict = defaultdict(int)
 buildings_nolgt_totalvol_meshdict = defaultdict(float)
+x=0
 with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA_MESHED',
                                                    'log_av45', 'log_45_70', 'log_70_90',
                                                    'log_ap90', 'log_inc', 'log_total',
@@ -451,6 +495,8 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA
                                                    'idcar_nat', 'NB_LOGTS'
                                                    ]) as cursor:
     for row in cursor:
+        print('Processing record #{}'.format(x))
+        x += 1
         if (row[0]/row[1])<0.5: #Remove parts under half of a building and compute number of housing units based on census
             cursor.deleteRow()
         else:
@@ -475,6 +521,7 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA
             buildings_nolgt_totalvol_meshdict[row[13]] += row[10]
             #Count the registered number of housing units based on building attributes in each census quadrat
             buildings_lgts_meshdict[row[13]] += row[14]
+        x+=1
 
 #For residential buildings without # of households, assign number of housing units based on volume, the compute pop/building
 if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
@@ -517,6 +564,9 @@ with (arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'N
 #Check for outliers
 
 #Spatial join buildings to 200-m mesh
+pop_count_variable_mesh = os.path.join(anci_dir, "insee_pop", "carreaux_nivNaturel_met.shp")
+pop_count_200m_mesh = os.path.join(anci_dir, "insee_pop", "arreaux_200m_shp")
+buildings_popvariable =os.path.join(pregdb, "buildings_pop_nivNaturel_inters")
 
 #Compute total population in each 200-m mesh
 
