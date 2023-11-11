@@ -33,6 +33,9 @@ bdcharm_dir = os.path.join(anci_dir, "bdcharm50")
 #Forest type
 bdforet_dir = os.path.join(anci_dir, "bdforet_v2")
 
+#Land cover
+lc_dir = os.path.join(anci_dir, 'oso')
+
 #Global aridity index
 gai_dir = os.path.join(anci_dir, 'gaiv3', 'Global-AI_v3_monthly')
 
@@ -77,10 +80,9 @@ if not arcpy.Exists(tempgdb):
                                    out_name=os.path.split(tempgdb)[1])
 
 #gdb to hold land cover statistics
-lcav_gdb = os.path.join(resdir, 'oso_lc_stats.gdb')
-if not arcpy.Exists(lcav_gdb ):
-    arcpy.CreateFileGDB_management(out_folder_path=os.path.split(lcav_gdb)[0],
-                                   out_name=os.path.split(lcav_gdb)[1])
+lcav_dir = os.path.join(resdir, 'oso_lc_stats')
+if not arcpy.Exists(lcav_dir):
+    os.mkdir(lcav_dir)
 
 #Template sr
 sr_template = arcpy.SpatialReference(2154)
@@ -102,6 +104,11 @@ bdforet_bvinters_tab = os.path.join(resdir, "bdforet_fr_bvinters.csv")
 bdhaies_fr = os.path.join(pregdb, "bdhaies_fr")
 bdhaies_bvinters = os.path.join(pregdb, "bdhaies_bvinters")
 bdhaies_bvinters_tab = os.path.join(resdir, "bdhaies_bvinters.csv")
+
+oso_veg = os.path.join(lcav_dir, 'oso_veg')
+oso_imp = os.path.join(lcav_dir, 'oso_imp')
+oso_agr = os.path.join(lcav_dir, 'oso_agr')
+oso_scr = os.path.join(lcav_dir, 'oso_scr')
 
 gai_yr = os.path.join(pregdb, "ai_v3_yrav")
 gai_summer = os.path.join(pregdb, "ai_v3_summerav")
@@ -226,35 +233,47 @@ if not arcpy.Exists(bdhaies_bvinters_tab):
 
 #--------------------------------- Land cover --------------------------------------------------------------------------
 #Land cover - theia oso
-lc_dir = os.path.join(anci_dir, 'oso')
-lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")
+lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")[0]
                for yr in [2018, 2019, 2020, 2021]}
 #Create dictionary of classes https://www.theia-land.fr/en/product/land-cover-map/
 lc_class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw', 7:'spoil', 8:"soy", 9:"sunfl",
               10:"corn", 11:"rice", 12:"roots", 13:"pastu", 14:"orchd", 15:"vinyd", 16:"forbr", 17:"forco",
               18:"grass", 19:"heath", 20:"rocks", 21:"beach", 22:'glasn', 23:'water'}
-for cl in lc_class_dict:
-    out_cl = os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2)))
-    start = time.time()
-    if not arcpy.Exists(out_cl):
-        (((Raster(lc_filedict[2018])==cl)
-          + (Raster(lc_filedict[2019])==cl)
-          + (Raster(lc_filedict[2020])==cl)
-          + (Raster(lc_filedict[2021])==cl)
-          )/4).save(out_cl)
-    print(time.time() - start)
 
-os.path.join(lcav_gdb, 'oso_veg')
-sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in [16,17,18,19])
+with arcpy.EnvManager(extent="36954, 1197654, 6099938, 7239968", snapRaster=lc_filedict[2018]):
+    for cl in lc_class_dict:
+        out_cl = os.path.join('D://Users//mmessa2', 'oso_cl{}.tif'.format(str(cl).zfill(2)))
+        start = time.time()
+        if not arcpy.Exists(out_cl):
+            print("Processing {}...".format(out_cl))
+            CellStatistics(in_rasters_or_constants=[(Raster(lc_filedict[2018])==cl),
+                                                    (Raster(lc_filedict[2019])==cl),
+                                                    (Raster(lc_filedict[2020])==cl),
+                                                    (Raster(lc_filedict[2021])==cl)],
+                           statistics_type='MEAN').save(out_cl)
+        print(time.time() - start)
 
-os.path.join(lcav_gdb, 'oso_imp') #
-sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in [1,2,3,4])
 
-os.path.join(lcav_gdb, 'oso_agr')
-sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(5,16))
+if not arcpy.Exists(oso_veg):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2)))
+                                 for cl in [16,17,18,19]],
+        statistics_type='SUM').save(oso_veg)
 
-os.path.join(lcav_gdb, 'oso_scr')
-sum(os.path.join(lcav_gdb, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(8,13))
+if not arcpy.Exists(oso_imp):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in [1,2,3,4]],
+        statistics_type='SUM').save(oso_imp)
+
+if not arcpy.Exists(oso_agr):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(5,16)],
+        statistics_type='SUM').save(oso_agr)
+
+if not arcpy.Exists(oso_scr):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2))) for cl in range(8,13)],
+        statistics_type='SUM').save(oso_scr)
 
 #--------------------------------- Global aridity index  ---------------------------------------------------------------
 gai_filedict = {mo: os.path.join(gai_dir, "ai_v3_{}.tif".format(str(mo).zfill(2))) for mo in range(1,13)}
