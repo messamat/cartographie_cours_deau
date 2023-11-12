@@ -1,6 +1,7 @@
 from setup_classement import * #Get directory structure and packages
 
-overwrite =False #Whether to overwrite outputs or skip them if done
+overwrite = False#Whether to overwrite outputs or skip them if done
+datdir = Path(datdir)
 
 #Read compilation of metadata
 geometadata_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
@@ -18,8 +19,8 @@ yonne_out_mergedfile = Path(rootdir,
                             geometadata_pd[geometadata_pd['Numéro'] == 89]['Lien local données'].iloc[0])
 yonne_in_dir = Path(rootdir,
                     Path(geometadata_pd[geometadata_pd['Numéro'] == 89]['Lien local données'].iloc[0]).parent)
-yonne_in_filepaths = getfilelist(yonne_in_dir, '.*[.](TAB|shp)$')
 
+#in_row = geometadata_pd.iloc[92,:]
 def copy_net(in_row, in_rootdir, out_dir, quiet, overwrite):
     if not quiet:
         print(in_row['Numéro'])
@@ -95,8 +96,6 @@ def check_colmatch(in_colrecord, net):
 
 #in_row = geometadata_pd.iloc[55,:]
 
-
-
 def QC_row_metadata(in_row, in_dict):
     print(in_row['Numéro'])
 
@@ -147,7 +146,11 @@ def QC_row_metadata(in_row, in_dict):
         return(np.nan)
 
 #Format Yonne — merge layers
-if not Path(yonne_out_mergedfile).exists() or overwrite:
+if (not Path(yonne_out_mergedfile).exists()) or overwrite:
+    if Path(yonne_out_mergedfile).exists():
+        for fname in getfilelist(yonne_in_dir, '{}*'.format(os.path.splitext(yonne_out_mergedfile.name)[0])):
+            os.remove(fname)
+    yonne_in_filepaths = getfilelist(yonne_in_dir, '.*[.](TAB|shp)$')
     pd.concat(
         [convert_bytes_to_na(
             gpd.read_file(file_path,
@@ -165,8 +168,6 @@ geometadata_pd['data_copy_path'] = geometadata_pd.apply(copy_net,
                                                         quiet=False,
                                                         overwrite=overwrite,
                                                         axis=1)
-
-
 
 #QC metadata
 if not out_QCtab.exists() or overwrite:
