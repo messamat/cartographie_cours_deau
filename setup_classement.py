@@ -45,27 +45,85 @@ if not os.path.exists(datdir):
 if not os.path.exists(resdir):
     os.mkdir(resdir)
 
-def getfilelist(dir, repattern=None):
+#Get all files in a ArcGIS workspace (file or personal GDB)
+def getwkspfiles(dir, repattern=None):
+    arcpy.env.workspace = dir
+    filenames_list = (arcpy.ListDatasets() or []) +\
+                     (arcpy.ListTables() or []) +\
+                     (arcpy.ListFeatureClasses() or []) # Either LisDatsets or ListTables may return None so need to create empty list alternative
+    if not repattern == None:
+        filenames_list = [filen for filen in filenames_list if re.search(repattern, filen)]
+
+    return ([os.path.join(dir, f) for f in filenames_list])
+    arcpy.ClearEnvironment('workspace')
+
+def getfilelist(dir, repattern=None, gdbf=True, nongdbf=True, fullpath=False):
     """Function to iteratively go through all subdirectories inside 'dir' path
     and retrieve path for each file that matches "repattern"
     gdbf and nongdbf allows the user to choose whether to consider ArcGIS workspaces (GDBs) or not or exclusively"""
 
     try:
-        filenames_list = []
-        for (dirpath, dirnames, filenames) in os.walk(dir):
-            for file in filenames:
-                if repattern is None:
-                    filenames_list.append(os.path.join(dirpath, file))
-                else:
-                    if re.search(repattern, file):
-                        filenames_list.append(os.path.join(dirpath, file))
+        if arcpy.Describe(dir).dataType == 'Workspace':
+            if gdbf == True:
+                print('{} is ArcGIS workspace...'.format(dir))
+                filenames_list = getwkspfiles(dir, repattern)
+            else:
+                raise ValueError(
+                    "A gdb workspace was given for dir but gdbf=False... either change dir or set gdbf to True")
+        else:
+            filenames_list = []
+
+            if gdbf == True:
+                for (dirpath, dirnames, filenames) in os.walk(dir):
+                    for in_dir in dirnames:
+                        fpath = os.path.join(dirpath, in_dir)
+                        if arcpy.Describe(fpath).dataType == 'Workspace':
+                            print('{} is ArcGIS workspace...'.format(fpath))
+                            filenames_list.extend(getwkspfiles(dir=fpath, repattern=repattern))
+            if nongdbf == True:
+                for (dirpath, dirnames, filenames) in os.walk(dir):
+                    for file in filenames:
+                        if repattern is None:
+                            filenames_list.append(os.path.join(dirpath, file))
+                        else:
+                            if re.search(repattern, file):
+                                filenames_list.append(os.path.join(dirpath, file))
         return (filenames_list)
 
+    # Return geoprocessing specific errors
+    except arcpy.ExecuteError:
+        arcpy.AddError(arcpy.GetMessages(2))
     # Return any other type of error
     except:
         # By default any other errors will be caught here
         e = sys.exc_info()[1]
         print(e.args[0])
+
+def divbb(bbox, res, divratio):
+    box_lc_x, box_lc_y, box_rc_x, box_rc_y = bbox
+    coln = (box_rc_x - box_lc_x) / float(res)
+    rown = (box_rc_y - box_lc_y) / float(res)
+
+    xbblist = np.arange(box_lc_x, box_rc_x + (float(res) * coln / divratio),
+                        float(res) * coln / divratio)
+    ybblist = np.arange(box_lc_y, box_rc_y + (float(res) * rown / divratio),
+                        float(res) * rown / divratio)
+
+    if abs(xbblist[-1]) > abs(box_rc_x):
+        xbblist[-1] = box_rc_x
+
+    if abs(ybblist[-1]) > abs(box_rc_y):
+        ybblist[-1] = box_rc_y
+
+    xbblist = np.unique(xbblist)
+    ybblist = np.unique(ybblist)
+
+    fullbblist = []
+    for pairx in zip(xbblist[:-1], xbblist[1:]):
+        for pairy in zip(ybblist[:-1], ybblist[1:]):
+            fullbblist.append((pairx[0], pairy[0], pairx[1], pairy[1]))
+
+    return (fullbblist)
 
 def unzip(infile):
     # Unzip folder

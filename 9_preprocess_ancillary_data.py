@@ -240,9 +240,37 @@ lc_class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw
               10:"corn", 11:"rice", 12:"roots", 13:"pastu", 14:"orchd", 15:"vinyd", 16:"forbr", 17:"forco",
               18:"grass", 19:"heath", 20:"rocks", 21:"beach", 22:'glasn', 23:'water'}
 
-with arcpy.EnvManager(extent="36954, 1197654, 6099938, 7239968", snapRaster=lc_filedict[2018]):
+#Tile raster (SplitRaster function does not work with arcpy)
+with arcpy.EnvManager(snapRaster=lc_filedict[2018]):
+    for yr in lc_filedict:
+        lcyr_gdb = os.path.join(lcav_dir, 'lc{}_tiles.gdb'.format(yr))
+        if not arcpy.Exists(lcyr_gdb):
+            arcpy.CreateFileGDB_management(out_folder_path=os.path.split(lcyr_gdb)[0],
+                                           out_name=os.path.split(lcyr_gdb)[1])
+
+        lcext = arcpy.Describe(lc_filedict[yr]).Extent
+        lc_bbox = [lcext.XMin, lcext.YMin, lcext.XMax, lcext.YMax]
+        lc_tiles_bblist = divbb(bbox=lc_bbox,
+                         res=arcpy.Describe(lc_filedict[yr]).meanCellWidth,
+                         divratio=6)
+        if len(getfilelist(lcyr_gdb, gdbf=True)) < len(lc_tiles_bblist):
+            x=1
+            for tile_bb in lc_tiles_bblist:
+                out_tile = os.path.join(lcyr_gdb, 'lc{0}_{1}'.format(yr, x))
+                if not arcpy.Exists(out_tile):
+                    print('Processing {}...'.format(out_tile))
+                    #arcpy.env.extent = ' '.join(map(str, tile_bb))
+                    arcpy.Clip_management(in_raster=lc_filedict[yr],
+                                          rectangle=' '.join(map(str, tile_bb)),
+                                          out_raster=out_tile,
+                                          maintain_clipping_extent='NO_MAINTAIN_EXTENT')
+                    arcpy.ClearEnvironment('extent')
+                else:
+                    print('{} already exists...'.format(out_tile))
+                x += 1
+
     for cl in lc_class_dict:
-        out_cl = os.path.join('D://Users//mmessa2', 'oso_cl{}.tif'.format(str(cl).zfill(2)))
+        out_cl = os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2)))
         start = time.time()
         if not arcpy.Exists(out_cl):
             print("Processing {}...".format(out_cl))
