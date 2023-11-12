@@ -542,14 +542,13 @@ if not 'VOLUME' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #V
 if not 'avind_per_log' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Average number of individuals per housing unit in quadrat
     arcpy.AddField_management(buildings_popvariable, 'avind_per_log', 'FLOAT')
 
-################################ TO RUN############################################################################
 buildings_lgts_meshdict = defaultdict(int)
 buildings_nolgt_totalvol_meshdict = defaultdict(float)
 
-with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA_MESHED',
+with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_MESHED', 'POLY_AREA_WHOLE',
                                                    'log_av45', 'log_45_70', 'log_70_90',
                                                    'log_ap90', 'log_inc', 'log_total',
-                                                   'HAUTEUR', 'POLY_AREA_WHOLE', 'VOLUME',
+                                                   'HAUTEUR', 'VOLUME',
                                                    'avind_per_log', 'ind',
                                                    'idcar_nat', 'NB_LOGTS'
                                                    ]) as cursor:
@@ -564,20 +563,20 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_WHOLE', 'POLY_AREA
 
             # Compute volume of each building
             if row[8] > 0:
-                row[10] = row[8]*row[9] #Volume = height*surface area
+                row[9] = row[8]*row[1] #Volume = height*surface area
             else:
-                row[10] = 4*row[9] #If no height data is available, assign standard "hauteur au faitage" of a single-floor house
+                row[9] = 4*row[1] #If no height data is available, assign standard "hauteur au faitage" of a single-floor house
 
             #Compute average number of individuals per housing unit in quadrat according to census
             if log_sum > 0:
-                row[11] = row[12]/log_sum
+                row[10] = row[11]/log_sum
             cursor.updateRow(row)
             del log_sum
 
             #Count the total volume of buildings without a registered number of housing units in each census quadrat
-            buildings_nolgt_totalvol_meshdict[row[13]] += row[10]
+            buildings_nolgt_totalvol_meshdict[row[12]] += row[9]
             #Count the registered number of housing units based on building attributes in each census quadrat
-            buildings_lgts_meshdict[row[13]] += row[14]
+            buildings_lgts_meshdict[row[12]] += row[13]
 
 #For residential buildings without # of households, assign number of housing units based on volume, the compute pop/building
 if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
@@ -585,37 +584,38 @@ if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable
 if not 'ind_est' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
     arcpy.AddField_management(buildings_popvariable, 'ind_est', 'FLOAT')
 
-with (arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB_LOGTS_EST', 'NB_LOGTS',
-                                                    'VOLUME', 'ind_est', 'avind_per_log']) as cursor):
-    #Adjust number of household units per building
-    if row[1] > 0: #If there are housing units in the quadrat according to the census
-        #If there are some buildings with a registered number of households in the quadrat
-        if buildings_lgts_meshdict[row[0]] > 0:
-            lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
+with arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB_LOGTS_EST', 'NB_LOGTS',
+                                                    'VOLUME', 'ind_est', 'avind_per_log']) as cursor:
+    for row in cursor:
+        #Adjust number of household units per building
+        if row[1] > 0: #If there are housing units in the quadrat according to the census
+            #If there are some buildings with a registered number of households in the quadrat
+            if buildings_lgts_meshdict[row[0]] > 0:
+                lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
 
-            #If total number of building-based household units exceeds that in the census,
-            #or if total number of building-based household units is inferior to that in the census and there are no
-            # buildings without household units. Adjust number of household units based on ratio.
-            if ((lgts_ratio_meshtobuildings<1) or
-                (lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] == 0)):
-                row[2] = row[3]*lgts_ratio_meshtobuildings
-            #If total number of building-based household units is inferior to that in the census
-            # and there are buildings without household units, assign units based on volume
-            elif lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] > 0:
-                row[2] = (buildings_lgts_meshdict[row[0]]-row[1])*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
-            #Otherwise, keep the same number of household units in building
+                #If total number of building-based household units exceeds that in the census,
+                #or if total number of building-based household units is inferior to that in the census and there are no
+                # buildings without household units. Adjust number of household units based on ratio.
+                if ((lgts_ratio_meshtobuildings<1) or
+                    (lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] == 0)):
+                    row[2] = row[3]*lgts_ratio_meshtobuildings
+                #If total number of building-based household units is inferior to that in the census
+                # and there are buildings without household units, assign units based on volume
+                elif ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] > 0)):
+                    row[2] = (buildings_lgts_meshdict[row[0]]-row[1])*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
+                #Otherwise, keep the same number of household units in building
+                else:
+                    row[2] = row[3]
+            #If there are no buildings with a registered number of households in the quadrat
             else:
-                row[2] = row[3]
-        #If there are no buildings with a registered number of households in the quadrat
-        else:
-            #Assign units based on volume
-            row[2] = (buildings_lgts_meshdict[row[0]] - row[1]) * (row[4] / buildings_nolgt_totalvol_meshdict[row[0]])  # Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
-        cursor.updateRow(row)
-
-        #Adjust number of household units per building if there are people in the quadrat
-        if row[6] > 0:
-            row[5] = row[2]*row[6] #Individuals in building= estimated number of household units in building*average number of individuals per housing unit in quadrat
+                #Assign units based on volume
+                row[2] = row[1] * (row[4] / buildings_nolgt_totalvol_meshdict[row[0]])  # Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
             cursor.updateRow(row)
+
+            #Adjust number of household units per building if there are people in the quadrat
+            if row[6] > 0:
+                row[5] = row[2]*row[6] #Individuals in building= estimated number of household units in building*average number of individuals per housing unit in quadrat
+                cursor.updateRow(row)
 
 #Check for outliers
 
