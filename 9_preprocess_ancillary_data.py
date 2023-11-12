@@ -566,15 +566,18 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB
                 lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
 
                 #If total number of building-based household units exceeds that in the census,
-                #or if total number of building-based household units is inferior to that in the census and there are no
+                #or if total number of building-based household units is inferior to that in the census, and there are no
                 # buildings without household units. Adjust number of household units based on ratio.
                 if ((lgts_ratio_meshtobuildings<1) or
-                    (lgts_ratio_meshtobuildings>1 and buildings_nolgt_totalvol_meshdict[row[0]] == 0)):
+                    ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] == 0))
+                ):
                     row[2] = row[3]*lgts_ratio_meshtobuildings
                 #If total number of building-based household units is inferior to that in the census
                 # and there are buildings without household units, assign units based on volume
                 elif ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] > 0)):
-                    row[2] = (buildings_lgts_meshdict[row[0]]-row[1])*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
+                    if row[3] == 0:
+                        row[2] = (row[1]-buildings_lgts_meshdict[row[0]]
+                                  )*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
                 #Otherwise, keep the same number of household units in building
                 else:
                     row[2] = row[3]
