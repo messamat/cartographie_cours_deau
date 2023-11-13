@@ -2,7 +2,7 @@ import fiona
 import shapely
 from setup_classement import * #Get directory structure and packages
 
-overwrite = True #Whether to overwrite outputs or skip them if done
+overwrite = False #Whether to overwrite outputs or skip them if done
 
 datdir = Path(datdir)
 resdir = Path(resdir)
@@ -14,6 +14,10 @@ geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_ré
 #Create output directory
 out_dir = Path(resdir, 'reseaux_departementaux_copies')
 out_net_path = Path(resdir, 'carto_loi_eau_france.gpkg')
+
+#Output harmonized network
+outputs_gdb = os.path.join(resdir, 'analysis_outputs.gdb')
+out_net_gdbpath = os.path.join(outputs_gdb, 'carto_loi_eau_fr')
 
 #Copy all layers for renaming
 net_copylist = getfilelist(out_dir, repattern='.*_copie[.](TAB|shp|gpkg)$')
@@ -267,10 +271,15 @@ if not Path(out_net_path).exists() or overwrite:
     net_merged.to_file(Path(out_net_path))
 
 #Create stable UID - #######################find way to integrate in open source code ###################################
-ce_net = os.path.join(resdir, "carto_loi_eau_france.gpkg", "main.carto_loi_eau_france")
-if 'UID_CE' not in [f.name for f in arcpy.ListFields(ce_net)]:
-    arcpy.AddField_management(in_table=ce_net, field_name='UID_CE', field_type='LONG')
-    with arcpy.da.UpdateCursor(ce_net, ['UID_CE', 'OID@']) as cursor:
+if not arcpy.Exists(outputs_gdb):
+    arcpy.CreateFileGDB_management(out_folder_path=os.path.split(outputs_gdb)[0],
+                                   out_name=os.path.split(outputs_gdb)[1])
+arcpy.CopyFeatures_management(in_features=os.path.join(str(out_net_path), 'main.carto_loi_eau_france'),
+                              out_feature_class=out_net_gdbpath)
+
+if 'UID_CE' not in [f.name for f in arcpy.ListFields(out_net_gdbpath)]:
+    arcpy.AddField_management(in_table=out_net_gdbpath, field_name='UID_CE', field_type='LONG')
+    with arcpy.da.UpdateCursor(out_net_gdbpath, ['UID_CE', 'OID@']) as cursor:
         for row in cursor:
             row[0] = row[1]
             cursor.updateRow(row)
