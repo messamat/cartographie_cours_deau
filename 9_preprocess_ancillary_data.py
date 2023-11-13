@@ -138,6 +138,12 @@ hydrobio_stations_pts = os.path.join(pregdb, "hydrobio_stations_naiade")
 
 buildings_filtered_fr = os.path.join(pregdb, "buildings_filtered_fr")
 buildings_popvariable =os.path.join(pregdb, "buildings_pop_nivNaturel_inters")
+pop_count_variable_mesh = os.path.join(anci_dir, "insee_pop", "carreaux_nivNaturel_met.shp")
+pop_count_variable_mesh_proj = os.path.join(anci_dir, tempgdb, "carreaux_nivNaturel_met_proj")
+pop_count_200m_fishnet = os.path.join(anci_dir, tempgdb, "carreaux_200m")
+pop_count_200m_fishnet_lambert = os.path.join(anci_dir, tempgdb, "carreaux_200m_lambert")
+pop_count_200m_fishnet_buildingsjoin = os.path.join(anci_dir, tempgdb, "carreaux_200m_buildingsjoin")
+pop_ras_200m = os.path.join(pregdb, 'insee_pop_interp200m')
 
 #--------------------------------- DEM - BDALTI ------------------------------------------------------------------------
 #Based on metadata from https://geoservices.ign.fr/documentation/donnees/alti/bdalti
@@ -234,48 +240,46 @@ if not arcpy.Exists(bdhaies_bvinters_tab):
 #--------------------------------- Land cover --------------------------------------------------------------------------
 #Land cover - theia oso
 lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")[0]
-               for yr in [2018, 2019, 2020, 2021]}
+               for yr in [2019, 2020, 2021]}
 #Create dictionary of classes https://www.theia-land.fr/en/product/land-cover-map/
 lc_class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw', 7:'spoil', 8:"soy", 9:"sunfl",
               10:"corn", 11:"rice", 12:"roots", 13:"pastu", 14:"orchd", 15:"vinyd", 16:"forbr", 17:"forco",
               18:"grass", 19:"heath", 20:"rocks", 21:"beach", 22:'glasn', 23:'water'}
 
 #Tile raster (SplitRaster function does not work with arcpy)
-with arcpy.EnvManager(snapRaster=lc_filedict[2018]):
-    for yr in lc_filedict:
-        lcyr_gdb = os.path.join(lcav_dir, 'lc{}_tiles.gdb'.format(yr))
-        if not arcpy.Exists(lcyr_gdb):
-            arcpy.CreateFileGDB_management(out_folder_path=os.path.split(lcyr_gdb)[0],
-                                           out_name=os.path.split(lcyr_gdb)[1])
-
-        lcext = arcpy.Describe(lc_filedict[yr]).Extent
-        lc_bbox = [lcext.XMin, lcext.YMin, lcext.XMax, lcext.YMax]
-        lc_tiles_bblist = divbb(bbox=lc_bbox,
-                         res=arcpy.Describe(lc_filedict[yr]).meanCellWidth,
-                         divratio=6)
-        if len(getfilelist(lcyr_gdb, gdbf=True)) < len(lc_tiles_bblist):
-            x=1
-            for tile_bb in lc_tiles_bblist:
-                out_tile = os.path.join(lcyr_gdb, 'lc{0}_{1}'.format(yr, x))
-                if not arcpy.Exists(out_tile):
-                    print('Processing {}...'.format(out_tile))
-                    #arcpy.env.extent = ' '.join(map(str, tile_bb))
-                    arcpy.Clip_management(in_raster=lc_filedict[yr],
-                                          rectangle=' '.join(map(str, tile_bb)),
-                                          out_raster=out_tile,
-                                          maintain_clipping_extent='NO_MAINTAIN_EXTENT')
-                    arcpy.ClearEnvironment('extent')
-                else:
-                    print('{} already exists...'.format(out_tile))
-                x += 1
-
+with arcpy.EnvManager(snapRaster=lc_filedict[2019]):
+    # for yr in lc_filedict:
+    #     lcyr_gdb = os.path.join(lcav_dir, 'lc{}_tiles.gdb'.format(yr))
+    #     if not arcpy.Exists(lcyr_gdb):
+    #         arcpy.CreateFileGDB_management(out_folder_path=os.path.split(lcyr_gdb)[0],
+    #                                        out_name=os.path.split(lcyr_gdb)[1])
+    #
+    #     lcext = arcpy.Describe(lc_filedict[yr]).Extent
+    #     lc_bbox = [lcext.XMin, lcext.YMin, lcext.XMax, lcext.YMax]
+    #     lc_tiles_bblist = divbb(bbox=lc_bbox,
+    #                      res=arcpy.Describe(lc_filedict[yr]).meanCellWidth,
+    #                      divratio=6)
+    #     if len(getfilelist(lcyr_gdb, gdbf=True)) < len(lc_tiles_bblist):
+    #         x=1
+    #         for tile_bb in lc_tiles_bblist:
+    #             out_tile = os.path.join(lcyr_gdb, 'lc{0}_{1}'.format(yr, x))
+    #             if not arcpy.Exists(out_tile):
+    #                 print('Processing {}...'.format(out_tile))
+    #                 #arcpy.env.extent = ' '.join(map(str, tile_bb))
+    #                 arcpy.Clip_management(in_raster=lc_filedict[yr],
+    #                                       rectangle=' '.join(map(str, tile_bb)),
+    #                                       out_raster=out_tile,
+    #                                       maintain_clipping_extent='NO_MAINTAIN_EXTENT')
+    #                 arcpy.ClearEnvironment('extent')
+    #             else:
+    #                 print('{} already exists...'.format(out_tile))
+    #             x += 1
     for cl in lc_class_dict:
         out_cl = os.path.join(lcav_dir, 'oso_cl{}'.format(str(cl).zfill(2)))
         start = time.time()
         if not arcpy.Exists(out_cl):
             print("Processing {}...".format(out_cl))
-            CellStatistics(in_rasters_or_constants=[(Raster(lc_filedict[2018])==cl),
-                                                    (Raster(lc_filedict[2019])==cl),
+            CellStatistics(in_rasters_or_constants=[(Raster(lc_filedict[2019])==cl),
                                                     (Raster(lc_filedict[2020])==cl),
                                                     (Raster(lc_filedict[2021])==cl)],
                            statistics_type='MEAN').save(out_cl)
@@ -593,19 +597,24 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB
             if buildings_lgts_meshdict[row[0]] > 0:
                 lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
 
-                #If total number of building-based household units exceeds that in the census,
-                #or if total number of building-based household units is inferior to that in the census, and there are no
-                # buildings without household units. Adjust number of household units based on ratio.
+                #(If total number of building-based housing units exceeds that in the census)
+                #OR
+                #(If total number of building-based housing units is inferior to that in the census,
+                # And there are no buildings without housing units.)
+                # ----> Adjust number of housing units in buildings with registered number of housing
                 if ((lgts_ratio_meshtobuildings<1) or
                     ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] == 0))
                 ):
                     row[2] = row[3]*lgts_ratio_meshtobuildings
+
                 #If total number of building-based household units is inferior to that in the census
-                # and there are buildings without household units, assign units based on volume
+                # AND there are buildings without household units, assign units to those based on their volume
                 elif ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] > 0)):
                     if row[3] == 0:
                         row[2] = (row[1]-buildings_lgts_meshdict[row[0]]
                                   )*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
+                    else: #Keep the registered number of housing units for the others
+                        row[2] = row[3]
                 #Otherwise, keep the same number of household units in building
                 else:
                     row[2] = row[3]
@@ -620,14 +629,65 @@ with arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB
                 row[5] = row[2]*row[6] #Individuals in building= estimated number of household units in building*average number of individuals per housing unit in quadrat
                 cursor.updateRow(row)
 
-#Check for outliers
+#Create matching continuous 200 m fishnet---------------------
+arcpy.Project_management(pop_count_variable_mesh, out_dataset=pop_count_variable_mesh_proj,
+                         out_coor_system=arcpy.SpatialReference(3035)) # The mesh was produced based on data projected in LAEA (EPSG 3035), the European cs
+variable_mesh_ext = arcpy.Describe(pop_count_variable_mesh_proj).Extent
+with arcpy.EnvManager(outputCoordinateSystem=arcpy.SpatialReference(3035)):
+    arcpy.CreateFishnet_management(
+        out_feature_class=pop_count_200m_fishnet,
+        origin_coord="{0} {1}".format(variable_mesh_ext.XMin, variable_mesh_ext.YMin),
+        y_axis_coord="{0} {1}".format(variable_mesh_ext.XMin, variable_mesh_ext.YMax),
+        cell_width=200,
+        cell_height=200,
+        corner_coord="{0} {1}".format(variable_mesh_ext.XMax, variable_mesh_ext.YMax),
+        geometry_type="POLYGON")
 
-#Spatial join buildings to 200-m mesh
-pop_count_variable_mesh = os.path.join(anci_dir, "insee_pop", "carreaux_nivNaturel_met.shp")
-pop_count_200m_mesh = os.path.join(anci_dir, "insee_pop", "arreaux_200m_shp")
-buildings_popvariable =os.path.join(pregdb, "buildings_pop_nivNaturel_inters")
+#Reproject to Lambert ---------------------
+arcpy.Project_management(pop_count_200m_fishnet, out_dataset=pop_count_200m_fishnet_lambert,
+                         out_coor_system=sr_template)
 
-#Compute total population in each 200-m mesh
+#Compute total population in each 200-m quadrat, summing pop and housing units for all buildings ---------------------
+# create a list of fields to sum
+f_tosum = ['NB_LOGTS_EST', 'ind_est']
 
-#COnvert 200-m mesh to raster
+# create the field mapping object
+fms_pop = arcpy.FieldMappings()
 
+# populate the field mapping object with the fields from both feature classes
+fms_pop.addTable(pop_count_200m_fishnet_lambert)
+fms_pop.addTable(buildings_popvariable)
+
+# loop through the field names to sum
+for fieldName in f_tosum:
+    # get the field map index of this field and get the field map
+    fieldIndex = fms_pop.findFieldMapIndex(fieldName)
+    fieldMap = fms_pop.getFieldMap(fieldIndex)
+    # update the field map with the new merge rule
+    fieldMap.mergeRule = 'Sum'
+    # replace with the updated field map
+    fms_pop.replaceFieldMap(fieldIndex, fieldMap)
+
+arcpy.SpatialJoin_analysis(target_features=pop_count_200m_fishnet_lambert,
+                           join_features=buildings_popvariable,
+                           out_feature_class=pop_count_200m_fishnet_buildingsjoin,
+                           join_operation='JOIN_ONE_TO_MANY',
+                           join_type='KEEP_ALL',
+                           field_mapping=fms_pop,
+                           match_option='LARGEST_OVERLAP'
+                           )
+
+with arcpy.da.UpdateCursor(pop_count_200m_fishnet_buildingsjoin, [f_tosum]) as cursor:
+    for row in cursor:
+        if row[0] == None:
+            row[0] = 0
+        if row[1] == None:
+            row[1] = 0
+        cursor.updateRow(row)
+
+#Convert 200-m mesh to raster------------------------------
+arcpy.PolygonToRaster_conversion(in_features=pop_count_200m_fishnet_buildingsjoin,
+                                 value_field='ind_est',
+                                 out_rasterdataset=pop_ras_200m,
+                                 cell_assignment='CELL_CENTER',
+                                 cellsize=200)
