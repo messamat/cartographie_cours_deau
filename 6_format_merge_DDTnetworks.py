@@ -29,6 +29,7 @@ def create_editable_lyr(in_copylyr, out_editlyr, in_encoding, overwrite):
                                 )
         #If one of the records has single-point LineStrings, remove these individual LineStrings and re-read
         except shapely.errors.GEOSException: #If one of the records has invalid geometry that prevents reading
+            print("Removing Linestrings with a single point...")
             out_fixed_net = "{0}_fixed{1}".format(os.path.splitext(in_copylyr)[0],
                                                   os.path.splitext(in_copylyr)[1])
             with fiona.open(in_copylyr) as input:
@@ -138,6 +139,22 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
                     else:
                         net['{0}{1}'.format(v, i+1)] = net[colnames_orig_list[i].lower()]
 
+        #Delete duplicate lines, keeping the ones with the most information
+        net.drop_duplicates(subset=[col for col in net.columns if col!='status_lyr'],
+                            keep='first',
+                            inplace=True)
+        if len(net.duplicated(subset='geometry')) > 0:
+            print('Removing duplicate geometries...')
+            net['number_of_nonna_attricols'] = net.apply(lambda in_row:
+                                                         sum([(not (in_row.loc[col]==np.nan))
+                                                              for col in renaming_dict.values()
+                                                              if col in net.columns]),
+                                                         axis=1)
+            net = net.sort_values('number_of_nonna_attricols', ascending=False).\
+                drop_duplicates('geometry', keep='first').\
+                sort_index().\
+                drop('number_of_nonna_attricols', axis=1)
+
         #Recategorize TYPE_ECOUL
         #row_metadata.columns
         dict_recat_type_ecoul = {'CE_recatégorisé': "Cours d'eau",
@@ -187,13 +204,12 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
     else:
         print('No metadata associated with this layer. Skipping.')
 
-for net_path in net_copylist:
+for net_path in net_copylist[50:]:
     #print(net_path)
     format_net(in_net_path=net_path,
                in_geometadata_pd=geometadata_pd,
-               overwrite = False
+               overwrite=overwrite
                )
-
 
 #Format Aisne -------------------------
 print('Formatting data for the Aisne department')
@@ -250,7 +266,7 @@ if not Path(out_net_path).exists() or overwrite:
         pipe(gpd.GeoDataFrame)
     net_merged.to_file(Path(out_net_path))
 
-#Create stable UID
+#Create stable UID - #######################find way to integrate in open source code ###################################
 ce_net = os.path.join(resdir, "carto_loi_eau_france.gpkg", "main.carto_loi_eau_france")
 if 'UID_CE' not in [f.name for f in arcpy.ListFields(ce_net)]:
     arcpy.AddField_management(in_table=ce_net, field_name='UID_CE', field_type='LONG')
