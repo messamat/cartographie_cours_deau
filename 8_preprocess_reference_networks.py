@@ -1,6 +1,7 @@
 import arcpy.analysis
-
 from setup_classement import  *
+
+overwrite=False
 
 anci_dir = os.path.join(datdir, "données_auxiliaires")#Ancillary data directory
 
@@ -37,6 +38,9 @@ bdcarthage = os.path.join(anci_dir, "carthage", "TRONCON_HYDROGRAPHIQUE.shp")
 
 #RHT
 rht = os.path.join(anci_dir, "rht_2020", "rht_lbt93.shp")
+
+#DDT network
+ce_net = os.path.join(resdir, "carto_loi_eau_france.gpkg", "main.carto_loi_eau_france")
 
 #------------- OUTPUTS ---------------------------------------------------------------------------------------------
 cats_hybasjoin = os.path.join(pregdb, 'BV_hybas0809_join') #Bassins versants topographiques (catchments) spatially jointed to HydroBASINS levels 8 and 9
@@ -106,13 +110,13 @@ if not arcpy.Exists(bdtopo2015_fr):
     arcpy.management.Merge(inputs=bdtopo2015_ce_filelist, output=bdtopo2015_fr)
 
 #------------- INTERSECT WITH UNITS OF ANALYSIS ------------------------------------------------------------------------
-for net in [bdtopo2015_fr, bcae_fr, bdcarthage, rht]:
+for net in [ce_net, bdtopo2015_fr, bcae_fr, bdcarthage, rht]:
     root_name = os.path.split(os.path.splitext(net)[0])[1]
     out_net = os.path.join(pregdb, "{}_bvinters".format(root_name))
     out_tab = os.path.join(resdir, "{}_bvinters.csv".format(root_name))
-    if not arcpy.Exists(out_net):
+    if (not arcpy.Exists(out_net)) or overwrite:
         print("Processing {}...".format(out_net))
         arcpy.analysis.Intersect([net, cats_hybasdeps], out_feature_class=out_net, join_attributes="ALL")
-    if not arcpy.Exists(out_tab):
+    if (not arcpy.Exists(out_tab)) or overwrite:
         print("Exporting {}...".format(out_tab))
         arcpy.CopyRows_management(out_net, out_tab)
