@@ -40,7 +40,8 @@ bdcarthage = os.path.join(anci_dir, "carthage", "TRONCON_HYDROGRAPHIQUE.shp")
 rht = os.path.join(anci_dir, "rht_2020", "rht_lbt93.shp")
 
 #DDT network
-ce_net = os.path.join(resdir, "carto_loi_eau_france.gpkg", "main.carto_loi_eau_france")
+outputs_gdb = os.path.join(resdir, 'analysis_outputs.gdb')
+ce_net = os.path.join(outputs_gdb, 'carto_loi_eau_fr')
 
 #------------- OUTPUTS ---------------------------------------------------------------------------------------------
 cats_hybasjoin = os.path.join(pregdb, 'BV_hybas0809_join') #Bassins versants topographiques (catchments) spatially jointed to HydroBASINS levels 8 and 9
