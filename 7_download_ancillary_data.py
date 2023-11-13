@@ -171,7 +171,7 @@ del session, response, soup
 oso_dir = os.path.join(out_dir, 'oso')
 if not os.path.exists(oso_dir):
     os.mkdir(oso_dir)
-for year,repo in {2018:"https://zenodo.org/records/3613415/files/Classif_Seed_0.tif",
+for year,repo in {#2018:"https://zenodo.org/records/3613415/files/Classif_Seed_0.tif", 2018 layer is buggy between 47N and 49N. Cannot use it
                   2019:"https://zenodo.org/records/6538321/files/Classif_Seed_0.tif",
                   2020:"https://zenodo.org/records/6538861/files/Classif_Seed_0_2020.tif",
                   2021:"https://zenodo.org/records/6538910/files/Classif_Seed_0_2021.tif"}.items():
