@@ -14,7 +14,7 @@ ce_net_prpts = os.path.join(resdir, "carto_loi_eau_france.gpkg", "main.carto_loi
 #Land cover - theia oso
 lc_dir = os.path.join(anci_dir, 'oso')
 lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")[0]
-               for yr in [2018, 2019, 2020, 2021]}
+               for yr in [2019, 2020, 2021]}
 lcav_dir = os.path.join(resdir, 'oso_lc_stats')
 
 #AWC
@@ -30,14 +30,6 @@ if not arcpy.Exists(statsgdb):
 ce_net_ras25m = os.path.join(pregdb, 'carto_loi_eau_france_ras25m')
 
 #Rasterize cats_hybasdeps at the resolution of land cover data
-#Create stable UID
-# if 'UID_BV' not in [f.name for f in arcpy.ListFields(cats_hybasdeps)]:
-#     arcpy.AddField_management(in_table=cats_hybasdeps, field_name='UID_BV', field_type='LONG')
-#     with arcpy.da.UpdateCursor(cats_hybasdeps, ['UID_BV', 'OID@']) as cursor:
-#         for row in cursor:
-#             row[0] = row[1]
-#             cursor.updateRow(row)
-
 #USe 'UID_BV'
 
 #Buffer 10 m on each side (only laterally) and rasterize buffer for streams at 10 m
@@ -66,14 +58,12 @@ config_dict = {
     ,'ari_ix_ssu': ['zonal', os.path.join(pregdb, "ai_v3_summerav"), cats_hybasdeps, 'MEAN']
     ,'ari_ix_uyr': ['cell', os.path.join(pregdb, "ai_v3_yrav_acc"), ce_net_prpts, 'MEAN']
     ,'ari_ix_usu': ['cell', os.path.join(pregdb, "ai_v3_summerav_acc"), ce_net_prpts, 'MEAN']
-    ,'lc_pc_s18': ['tabulate', lc_filedict[2018], cats_hybasdeps]
-    ,'lc_pc_s19': ['tabulate', lc_filedict[2019], cats_hybasdeps]
-    ,'lc_pc_s20': ['tabulate', lc_filedict[2020], cats_hybasdeps]
-    ,'lc_pc_s21': ['tabulate', lc_filedict[2021], cats_hybasdeps]
-    ,'lc_pc_b18': ['tabulate', lc_filedict[2018], ce_buf_ras10m]
-    ,'lc_pc_b19': ['tabulate', lc_filedict[2019], ce_buf_ras10m]
-    ,'lc_pc_b20': ['tabulate', lc_filedict[2020], ce_buf_ras10m]
-    ,'lc_pc_b21': ['tabulate', lc_filedict[2021], ce_buf_ras10m]
+    , 'lc_pc_s19': ['tabulate', lc_filedict[2019], cats_hybasdeps]
+    , 'lc_pc_s20': ['tabulate', lc_filedict[2020], cats_hybasdeps]
+    , 'lc_pc_s21': ['tabulate', lc_filedict[2021], cats_hybasdeps]
+    , 'lc_pc_b19': ['tabulate', lc_filedict[2019], ce_buf_ras10m]
+    , 'lc_pc_b20': ['tabulate', lc_filedict[2020], ce_buf_ras10m]
+    , 'lc_pc_b21': ['tabulate', lc_filedict[2021], ce_buf_ras10m]
     ,'veg_pc_use': ['cell', os.path.join(lcav_dir, 'oso_veg_acc'), ce_net_prpts, 'MEAN']
     ,'wet_pc_use': ['cell', os.path.join(lcav_dir, 'oso_wet_acc'), ce_net_prpts, 'MEAN']
     ,'gla_pc_use': ['cell', os.path.join(lcav_dir, 'oso_gla_acc'), ce_net_prpts, 'MEAN']
@@ -94,31 +84,47 @@ for ho in horizons:
                                               cats_hybasdeps, 'MEAN']
     config_dict['cly_pc_sav{}'.format(ho)] = ['zonal', os.path.join(gsm_dir, "argile.{}.tif".format(ho)),
                                               cats_hybasdeps, 'MEAN']
-    config_dict['slt_pc_sav{}'.format(ho)] = ['zonal', os.path.join(gsm_dir, "limon{}.tif".format(ho)),
+    config_dict['slt_pc_sav{}'.format(ho)] = ['zonal', os.path.join(gsm_dir, "limon.{}.tif".format(ho)),
                                               cats_hybasdeps, 'MEAN']
-    config_dict['snd_pc_sav{}'.format(ho)] = ['zonal', os.path.join(gsm_dir, "sable{}.tif".format(ho)),
+    config_dict['snd_pc_sav{}'.format(ho)] = ['zonal', os.path.join(gsm_dir, "sable.{}.tif".format(ho)),
                                               cats_hybasdeps, 'MEAN']
     config_dict['awc_mm_uav{}'.format(ho)] = ['cell', os.path.join(gsm_dir, "awc_mm_{}_acc.tif".format(ho)),
                                               ce_net_prpts, 'MEAN']
     config_dict['cly_pc_uav{}'.format(ho)] = ['cell', os.path.join(gsm_dir, "argile.{}_acc.tif".format(ho)),
                                               ce_net_prpts, 'MEAN']
-    config_dict['slt_pc_uav{}'.format(ho)] = ['cell', os.path.join(gsm_dir, "limon{}_acc.tif".format(ho)),
+    config_dict['slt_pc_uav{}'.format(ho)] = ['cell', os.path.join(gsm_dir, "limon.{}_acc.tif".format(ho)),
                                               ce_net_prpts, 'MEAN']
-    config_dict['snd_pc_uav{}'.format(ho)] = ['cell', os.path.join(gsm_dir, "sable{}_acc.tif".format(ho)),
+    config_dict['snd_pc_uav{}'.format(ho)] = ['cell', os.path.join(gsm_dir, "sable.{}_acc.tif".format(ho)),
                                               ce_net_prpts, 'MEAN']
-
 
 for k,v in config_dict.items():
+    #print(k)
     if v[0] == 'zonal':
         if arcpy.Exists(v[1]):
             if arcpy.Exists(v[2]):
-                print("Processing {}...".format(k))
-                ZonalStatisticsAsTable(in_zone_data=v[2], zone_field='UID_BV', in_value_raster=v[1],
-                                       out_table=os.path.join(statsgdb, k), statistics_type=v[3])
+                out_tab = os.path.join(statsgdb, k)
+                if not arcpy.Exists(out_tab):
+                    print("Processing {}...".format(k))
+                    ZonalStatisticsAsTable(in_zone_data=v[2], zone_field='UID_BV', in_value_raster=v[1],
+                                           out_table=out_tab, statistics_type=v[3])
+                else:
+                    print("{} already exists. Skipping...".format(out_tab))
 
     elif v[0] == 'tabulate':
         if arcpy.Exists(v[1]):
             if arcpy.Exists(v[2]):
-                print("Processing {}...".format(k))
-                TabulateArea(in_zone_data=v[2], zone_field='UID_BV', in_class_data=v[1], class_field='Value',
-                             out_table=os.path.join(statsgdb, k), classes_as_rows='CLASSES_AS_FIELDS')
+                out_tab = os.path.join(statsgdb, k)
+                if not arcpy.Exists(out_tab):
+                    print("Processing {}...".format(k))
+                    TabulateArea(in_zone_data=v[2], zone_field='UID_BV', in_class_data=v[1], class_field='Value',
+                                 out_table=out_tab, classes_as_rows='CLASSES_AS_FIELDS')
+                else:
+                    print("{} already exists. Skipping...".format(out_tab))
+
+############### extra stuff
+#for yr in [2018, 2019, 2020, 2021]:
+#     lcyr_gdb = os.path.join(lcav_dir, 'lc{}_tiles.gdb'.format(yr))
+#     for tile in lcyr_gdb:
+#         tile_num = re.sub('lc{}_'.format(yr), '', tile)
+#         config_dict['lc_pc_s{0}_{1}'.format(yr, tile_num)] = ['tabulate', tile, cats_hybasdeps]
+#         config_dict['lc_pc_s{0}_{1}'.format(yr, tile_num)] = ['tabulate', tile, cats_hybasdeps]
