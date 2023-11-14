@@ -460,231 +460,190 @@ if not arcpy.Exists(hydrobio_stations_pts):
     arcpy.Delete_management(hydrobio_stations_copy)
 
 #--------------------------------- Format INSEE population data  -------------------------------------------------------
+if not arcpy.Exists(pop_ras_200m): #This may take 12-24h to process, on a good computer
 #Filter and merge buildings
-if not arcpy.Exists(buildings_filtered_fr):
-    buildings_filelist = getfilelist(bdtopo2019_dir, "BATIMENT.shp$")
-    #buildings_shp = buildings_filelist[0]
+    if not arcpy.Exists(buildings_filtered_fr):
+        print('Filtering buildings...')
+        buildings_filelist = getfilelist(bdtopo2019_dir, "BATIMENT.shp$")
+        #buildings_shp = buildings_filelist[0]
 
-    temp_buildings_list= []
-    for buildings_shp in buildings_filelist:
-        temp_lyr=os.path.join(tempgdb,
-                              "{}_batiments".format(
-                                  re.sub('[-]', '_',
-                                         Path(buildings_shp).parts[-3])
-                              ))
-        if not arcpy.Exists(temp_lyr):
-            print("Processing {}".format(os.path.split(temp_lyr)[1]))
+        temp_buildings_list= []
+        for buildings_shp in buildings_filelist:
+            temp_lyr=os.path.join(tempgdb,
+                                  "{}_batiments".format(
+                                      re.sub('[-]', '_',
+                                             Path(buildings_shp).parts[-3])
+                                  ))
+            if not arcpy.Exists(temp_lyr):
+                print("Processing {}".format(os.path.split(temp_lyr)[1]))
 
-            arcpy.MakeFeatureLayer_management(in_features=buildings_shp,
-                                   out_layer='buildings_lyr',
-                                   where_clause=("((USAGE1 IN ('Résidentiel', 'Indifférencié')) "
-                                                 "OR (USAGE2 IN ('Résidentiel', 'Indifférencié'))) "
-                                                 "AND (NATURE IN ('Indifférenciée', 'Château')) "
-                                                 "AND (LEGER = 'Non') "
-                                                 "AND (ETAT='En service') "
-                                                 "AND ((HAUTEUR > 2) OR (HAUTEUR = 0))"))
-            arcpy.CopyFeatures_management(in_features='buildings_lyr',
-                                          out_feature_class=temp_lyr
-                                          )
-            temp_buildings_list.append(temp_lyr)
-            arcpy.AddGeometryAttributes_management(temp_lyr, Geometry_Properties='AREA', Area_Unit='SQUARE_METERS')
-            with arcpy.da.UpdateCursor(temp_lyr, ['POLY_AREA']) as cursor:
-                for row in cursor:
-                    if row[0] < 20:
-                        cursor.deleteRow()
-            arcpy.Delete_management('buildings_lyr')
+                arcpy.MakeFeatureLayer_management(in_features=buildings_shp,
+                                       out_layer='buildings_lyr',
+                                       where_clause=("((USAGE1 IN ('Résidentiel', 'Indifférencié')) "
+                                                     "OR (USAGE2 IN ('Résidentiel', 'Indifférencié'))) "
+                                                     "AND (NATURE IN ('Indifférenciée', 'Château')) "
+                                                     "AND (LEGER = 'Non') "
+                                                     "AND (ETAT='En service') "
+                                                     "AND ((HAUTEUR > 2) OR (HAUTEUR = 0))"))
+                arcpy.CopyFeatures_management(in_features='buildings_lyr',
+                                              out_feature_class=temp_lyr
+                                              )
+                temp_buildings_list.append(temp_lyr)
+                arcpy.AddGeometryAttributes_management(temp_lyr, Geometry_Properties='AREA', Area_Unit='SQUARE_METERS')
+                with arcpy.da.UpdateCursor(temp_lyr, ['POLY_AREA']) as cursor:
+                    for row in cursor:
+                        if row[0] < 20:
+                            cursor.deleteRow()
+                arcpy.Delete_management('buildings_lyr')
 
-    print("Merging all building layers...")
-    arcpy.Merge_management(inputs=temp_buildings_list, output=buildings_filtered_fr)
-    arcpy.AlterField_management(buildings_filtered_fr, 'POLY_AREA',
-                                'POLY_AREA_WHOLE', 'POLY_AREA_WHOLE')
-    print("Deleting temporary building layers...")
-    for temp_lyr in temp_buildings_list:
-        arcpy.Delete_management(temp_lyr)
+        print("Merging all building layers...")
+        arcpy.Merge_management(inputs=temp_buildings_list, output=buildings_filtered_fr)
+        arcpy.AlterField_management(buildings_filtered_fr, 'POLY_AREA',
+                                    'POLY_AREA_WHOLE', 'POLY_AREA_WHOLE')
+        print("Deleting temporary building layers...")
+        for temp_lyr in temp_buildings_list:
+            arcpy.Delete_management(temp_lyr)
 
-#Intersect buildings with variable mesh size
-if not arcpy.Exists(buildings_popvariable):
-    arcpy.Intersect_analysis([buildings_filtered_fr, pop_count_variable_mesh],
-                             out_feature_class=buildings_popvariable,
-                             join_attributes='ALL')
+    #Intersect buildings with variable mesh size
+    print('Intersect building with census data...')
+    if not arcpy.Exists(buildings_popvariable):
+        arcpy.Intersect_analysis([buildings_filtered_fr, pop_count_variable_mesh],
+                                 out_feature_class=buildings_popvariable,
+                                 join_attributes='ALL')
 
-#Pre-process attributes
-arcpy.AddGeometryAttributes_management(buildings_popvariable, Geometry_Properties='AREA', Area_Unit='SQUARE_METERS')
-arcpy.AlterField_management(buildings_popvariable, 'POLY_AREA',
-                            'POLY_AREA_MESHED', 'POLY_AREA_MESHED')
+    #Pre-process attributes
+    arcpy.AddGeometryAttributes_management(buildings_popvariable, Geometry_Properties='AREA', Area_Unit='SQUARE_METERS')
+    arcpy.AlterField_management(buildings_popvariable, 'POLY_AREA',
+                                'POLY_AREA_MESHED', 'POLY_AREA_MESHED')
 
-if not 'log_total' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Compute total number of households in each quadrat
-    arcpy.AddField_management(buildings_popvariable, 'log_total', 'FLOAT')
-if not 'VOLUME' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Volume of each building
-    arcpy.AddField_management(buildings_popvariable, 'VOLUME', 'FLOAT')
-if not 'avind_per_log' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Average number of individuals per housing unit in quadrat
-    arcpy.AddField_management(buildings_popvariable, 'avind_per_log', 'FLOAT')
+    if not 'log_total' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Compute total number of households in each quadrat
+        arcpy.AddField_management(buildings_popvariable, 'log_total', 'FLOAT')
+    if not 'VOLUME' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Volume of each building
+        arcpy.AddField_management(buildings_popvariable, 'VOLUME', 'FLOAT')
+    if not 'avind_per_log' in [f.name for f in arcpy.ListFields(buildings_popvariable)]: #Average number of individuals per housing unit in quadrat
+        arcpy.AddField_management(buildings_popvariable, 'avind_per_log', 'FLOAT')
 
-buildings_lgts_meshdict = defaultdict(int)
-buildings_nolgt_totalvol_meshdict = defaultdict(float)
-
-with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_MESHED', 'POLY_AREA_WHOLE',
-                                                   'log_av45', 'log_45_70', 'log_70_90',
-                                                   'log_ap90', 'log_inc', 'log_total',
-                                                   'HAUTEUR', 'VOLUME',
-                                                   'avind_per_log', 'ind',
-                                                   'idcar_nat', 'NB_LOGTS'
-                                                   ]) as cursor:
-    for row in cursor:
-        if (row[0]/row[1])<0.5: #Remove parts under half of a building and compute number of housing units based on census
-            cursor.deleteRow()
-        else:
-            log_sum = row[2] + row[3] + row[4] + row[5] + row[6]
-
-            # Compute total number of households in each mesh
-            row[7] = log_sum
-
-            # Compute volume of each building
-            if row[8] > 0:
-                row[9] = row[8]*row[1] #Volume = height*surface area
+    print('Assigning estimated housing units and populations to buildings...')
+    buildings_lgts_meshdict = defaultdict(int)
+    buildings_nolgt_totalvol_meshdict = defaultdict(float)
+    with arcpy.da.UpdateCursor(buildings_popvariable, ['POLY_AREA_MESHED', 'POLY_AREA_WHOLE',
+                                                       'log_av45', 'log_45_70', 'log_70_90',
+                                                       'log_ap90', 'log_inc', 'log_total',
+                                                       'HAUTEUR', 'VOLUME',
+                                                       'avind_per_log', 'ind',
+                                                       'idcar_nat', 'NB_LOGTS'
+                                                       ]) as cursor:
+        for row in cursor:
+            if (row[0]/row[1])<0.5: #Remove parts under half of a building and compute number of housing units based on census
+                cursor.deleteRow()
             else:
-                row[9] = 4*row[1] #If no height data is available, assign standard "hauteur au faitage" of a single-floor house
+                log_sum = row[2] + row[3] + row[4] + row[5] + row[6]
 
-            #Compute average number of individuals per housing unit in quadrat according to census
-            if log_sum > 0:
-                row[10] = row[11]/log_sum
-            cursor.updateRow(row)
-            del log_sum
+                # Compute total number of households in each mesh
+                row[7] = log_sum
 
-            #Count the total volume of buildings without a registered number of housing units in each census quadrat
-            buildings_nolgt_totalvol_meshdict[row[12]] += row[9]
-            #Count the registered number of housing units based on building attributes in each census quadrat
-            buildings_lgts_meshdict[row[12]] += row[13]
-
-#For residential buildings without # of households, assign number of housing units based on volume, the compute pop/building
-if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
-    arcpy.AddField_management(buildings_popvariable, 'NB_LOGTS_EST', 'FLOAT')
-if not 'ind_est' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
-    arcpy.AddField_management(buildings_popvariable, 'ind_est', 'FLOAT')
-
-with arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB_LOGTS_EST', 'NB_LOGTS',
-                                                    'VOLUME', 'ind_est', 'avind_per_log']) as cursor:
-    for row in cursor:
-        #Adjust number of household units per building
-        if row[1] > 0: #If there are housing units in the quadrat according to the census
-            #If there are some buildings with a registered number of households in the quadrat
-            if buildings_lgts_meshdict[row[0]] > 0:
-                lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
-
-                #(If total number of building-based housing units exceeds that in the census)
-                #OR
-                #(If total number of building-based housing units is inferior to that in the census,
-                # And there are no buildings without housing units.)
-                # ----> Adjust number of housing units in buildings with registered number of housing
-                if ((lgts_ratio_meshtobuildings<1) or
-                    ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] == 0))
-                ):
-                    row[2] = row[3]*lgts_ratio_meshtobuildings
-
-                #If total number of building-based household units is inferior to that in the census
-                # AND there are buildings without household units, assign units to those based on their volume
-                elif ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] > 0)):
-                    if row[3] == 0:
-                        row[2] = (row[1]-buildings_lgts_meshdict[row[0]]
-                                  )*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
-                    else: #Keep the registered number of housing units for the others
-                        row[2] = row[3]
-                #Otherwise, keep the same number of household units in building
+                # Compute volume of each building
+                if row[8] > 0:
+                    row[9] = row[8]*row[1] #Volume = height*surface area
                 else:
-                    row[2] = row[3]
-            #If there are no buildings with a registered number of households in the quadrat
-            else:
-                #Assign units based on volume
-                row[2] = row[1] * (row[4] / buildings_nolgt_totalvol_meshdict[row[0]])  # Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
-            cursor.updateRow(row)
+                    row[9] = 4*row[1] #If no height data is available, assign standard "hauteur au faitage" of a single-floor house
 
-            #Adjust number of household units per building if there are people in the quadrat
-            if row[6] > 0:
-                row[5] = row[2]*row[6] #Individuals in building= estimated number of household units in building*average number of individuals per housing unit in quadrat
+                #Compute average number of individuals per housing unit in quadrat according to census
+                if log_sum > 0:
+                    row[10] = row[11]/log_sum
+                cursor.updateRow(row)
+                del log_sum
+
+                #Count the total volume of buildings without a registered number of housing units in each census quadrat
+                if row[13] == 0:
+                    buildings_nolgt_totalvol_meshdict[row[12]] += row[9]
+                #Count the registered number of housing units based on building attributes in each census quadrat
+                buildings_lgts_meshdict[row[12]] += row[13]
+
+    #For residential buildings without # of households, assign number of housing units based on volume, the compute pop/building
+    if not 'NB_LOGTS_EST' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
+        arcpy.AddField_management(buildings_popvariable, 'NB_LOGTS_EST', 'FLOAT')
+    if not 'ind_est' in [f.name for f in arcpy.ListFields(buildings_popvariable)]:
+        arcpy.AddField_management(buildings_popvariable, 'ind_est', 'FLOAT')
+
+    with arcpy.da.UpdateCursor(buildings_popvariable, ['idcar_nat', 'log_total', 'NB_LOGTS_EST', 'NB_LOGTS',
+                                                        'VOLUME', 'ind_est', 'avind_per_log']) as cursor:
+        for row in cursor:
+            #Adjust number of household units per building
+            if row[1] > 0: #If there are housing units in the quadrat according to the census
+                #If there are some buildings with a registered number of households in the quadrat
+                if buildings_lgts_meshdict[row[0]] > 0:
+                    lgts_ratio_meshtobuildings = row[1]/buildings_lgts_meshdict[row[0]] #Ratio of census- vs. buildings-based number of housing units
+
+                    #(If total number of building-based housing units exceeds that in the census)
+                    #OR
+                    #(If total number of building-based housing units is inferior to that in the census,
+                    # And there are no buildings without housing units.)
+                    # ----> Adjust number of housing units in buildings with registered number of housing
+                    if ((lgts_ratio_meshtobuildings<1) or
+                        ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] == 0))
+                    ):
+                        row[2] = row[3]*lgts_ratio_meshtobuildings
+
+                    #If total number of building-based household units is inferior to that in the census
+                    # AND there are buildings without household units, assign units to those based on their volume
+                    elif ((lgts_ratio_meshtobuildings>1) and (buildings_nolgt_totalvol_meshdict[row[0]] > 0)):
+                        if row[3] == 0:
+                            row[2] = (row[1]-buildings_lgts_meshdict[row[0]]
+                                      )*(row[4]/buildings_nolgt_totalvol_meshdict[row[0]]) #Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
+                        else: #Keep the registered number of housing units for the others
+                            row[2] = row[3]
+                    #Otherwise, keep the same number of household units in building
+                    else:
+                        row[2] = row[3]
+                #If there are no buildings with a registered number of households in the quadrat
+                else:
+                    #Assign units based on volume
+                    row[2] = row[1] * (row[4] / buildings_nolgt_totalvol_meshdict[row[0]])  # Diff in number of housing units*proportion of unassigned building volume in quadrat in this building
                 cursor.updateRow(row)
 
-#Create matching continuous 200 m fishnet---------------------
-arcpy.Project_management(pop_count_variable_mesh, out_dataset=pop_count_variable_mesh_proj,
-                         out_coor_system=arcpy.SpatialReference(3035)) # The mesh was produced based on data projected in LAEA (EPSG 3035), the European cs
-variable_mesh_ext = arcpy.Describe(pop_count_variable_mesh_proj).Extent
-with arcpy.EnvManager(outputCoordinateSystem=arcpy.SpatialReference(3035)):
-    if not arcpy.Exists(pop_count_200m_fishnet):
-        arcpy.CreateFishnet_management(
-            out_feature_class=pop_count_200m_fishnet,
-            origin_coord="{0} {1}".format(variable_mesh_ext.XMin, variable_mesh_ext.YMin),
-            y_axis_coord="{0} {1}".format(variable_mesh_ext.XMin, variable_mesh_ext.YMax),
-            cell_width=200,
-            cell_height=200,
-            corner_coord="{0} {1}".format(variable_mesh_ext.XMax, variable_mesh_ext.YMax),
-            geometry_type="POLYGON")
+                #Adjust number of household units per building if there are people in the quadrat
+                if row[6] > 0:
+                    row[5] = row[2]*row[6] #Individuals in building= estimated number of household units in building*average number of individuals per housing unit in quadrat
+                    cursor.updateRow(row)
 
-    #Convert 200-m mesh to raster------------------------------
-    if not arcpy.Exists(fishnet_ras_200m):
-        arcpy.PolygonToRaster_conversion(in_features=pop_count_200m_fishnet,
-                                         value_field='OID',
-                                         out_rasterdataset=fishnet_ras_200m,
-                                         cell_assignment='CELL_CENTER',
-                                         cellsize=200)
+    #Create matching continuous 200 m fishnet---------------------
+    if not arcpy.Exists(pop_count_variable_mesh_proj):
+        arcpy.Project_management(pop_count_variable_mesh, out_dataset=pop_count_variable_mesh_proj,
+                                 out_coor_system=arcpy.SpatialReference(3035)) # The mesh was produced based on data projected in LAEA (EPSG 3035), the European cs
+    variable_mesh_ext = arcpy.Describe(pop_count_variable_mesh_proj).Extent
 
-    #Convert buildings to points ------------------------------
-    arcpy.FeatureToPoint_management(in_features=buildings_popvariable,
-                                    out_feature_class=buildings_popvariable_pts,
-                                    point_location='INSIDE'
-                                )
+    with arcpy.EnvManager(outputCoordinateSystem=arcpy.SpatialReference(3035)):
+        if not arcpy.Exists(pop_count_200m_fishnet):
+            arcpy.CreateFishnet_management(
+                out_feature_class=pop_count_200m_fishnet,
+                origin_coord="{0} {1}".format(variable_mesh_ext.XMin, variable_mesh_ext.YMin),
+                y_axis_coord="{0} {1}".format(variable_mesh_ext.XMin, variable_mesh_ext.YMax),
+                cell_width=200,
+                cell_height=200,
+                corner_coord="{0} {1}".format(variable_mesh_ext.XMax, variable_mesh_ext.YMax),
+                geometry_type="POLYGON")
 
-    with arcpy.EnvManager(extent=fishnet_ras_200m, snapRaster=fishnet_ras_200m):
-        arcpy.PointToRaster_conversion(in_features=buildings_popvariable_pts,
-                                       value_field='ind_est',
-                                       out_rasterdataset=pop_ras_200m,
-                                       cell_assignment='SUM',
-                                       cellsize=200)
+        #Convert 200-m mesh to raster------------------------------
+        if not arcpy.Exists(fishnet_ras_200m):
+            arcpy.PolygonToRaster_conversion(in_features=pop_count_200m_fishnet,
+                                             value_field='OID',
+                                             out_rasterdataset=fishnet_ras_200m,
+                                             cell_assignment='CELL_CENTER',
+                                             cellsize=200)
 
+        #Convert buildings to points ------------------------------
+        if not arcpy.Exists(buildings_popvariable_pts):
+            print('Converting buildings to points...')
+            arcpy.FeatureToPoint_management(in_features=buildings_popvariable,
+                                            out_feature_class=buildings_popvariable_pts,
+                                            point_location='INSIDE'
+                                        )
 
-#Reproject to Lambert ---------------------
-arcpy.Project_management(pop_count_200m_fishnet, out_dataset=pop_count_200m_fishnet_lambert,
-                         out_coor_system=sr_template)
-#######################################################################
-# #Compute total population in each 200-m quadrat, summing pop and housing units for all buildings ---------------------
-# # create a list of fields to sum
-# f_tosum = ['NB_LOGTS_EST', 'ind_est']
-#
-# # create the field mapping object
-# fms_pop = arcpy.FieldMappings()
-#
-# # populate the field mapping object with the fields from both feature classes
-# fms_pop.addTable(pop_count_200m_fishnet_lambert)
-# fms_pop.addTable(buildings_popvariable)
-#
-# # loop through the field names to sum
-# for fieldName in f_tosum:
-#     # get the field map index of this field and get the field map
-#     fieldIndex = fms_pop.findFieldMapIndex(fieldName)
-#     fieldMap = fms_pop.getFieldMap(fieldIndex)
-#     # update the field map with the new merge rule
-#     fieldMap.mergeRule = 'Sum'
-#     # replace with the updated field map
-#     fms_pop.replaceFieldMap(fieldIndex, fieldMap)
-#
-# arcpy.SpatialJoin_analysis(target_features=pop_count_200m_fishnet_lambert,
-#                            join_features=buildings_popvariable,
-#                            out_feature_class=pop_count_200m_fishnet_buildingsjoin,
-#                            join_operation='JOIN_ONE_TO_MANY',
-#                            join_type='KEEP_ALL',
-#                            field_mapping=fms_pop,
-#                            match_option='LARGEST_OVERLAP'
-#                            )
-#
-# with arcpy.da.UpdateCursor(pop_count_200m_fishnet_buildingsjoin, [f_tosum]) as cursor:
-#     for row in cursor:
-#         if row[0] == None:
-#             row[0] = 0
-#         if row[1] == None:
-#             row[1] = 0
-#         cursor.updateRow(row)
-#
-# #Convert 200-m mesh to raster------------------------------
-# arcpy.PolygonToRaster_conversion(in_features=pop_count_200m_fishnet_buildingsjoin,
-#                                  value_field='ind_est',
-#                                  out_rasterdataset=pop_ras_200m,
-#                                  cell_assignment='CELL_CENTER',
-#                                  cellsize=200)
+        with arcpy.EnvManager(extent=fishnet_ras_200m, snapRaster=fishnet_ras_200m):
+            print('Converting building points to raster...')
+            arcpy.PointToRaster_conversion(in_features=buildings_popvariable_pts,
+                                           value_field='ind_est',
+                                           out_rasterdataset=pop_ras_200m,
+                                           cell_assignment='SUM',
+                                           cellsize=200)
