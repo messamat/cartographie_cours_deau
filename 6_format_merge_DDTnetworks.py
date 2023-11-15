@@ -19,10 +19,14 @@ out_net_path = Path(resdir, 'carto_loi_eau_france.gpkg')
 outputs_gdb = os.path.join(resdir, 'analysis_outputs.gdb')
 out_net_gdbpath = os.path.join(outputs_gdb, 'carto_loi_eau_fr')
 
-#Copy all layers for renaming
-net_copylist = getfilelist(out_dir, repattern='.*_copie[.](TAB|shp|gpkg)$')
+#Output table of number of NAs per column in each network
+out_colNAs_tab = os.path.join(resdir, 'cartos_loi_eau_colNAs.csv')
 
-# in_net_path = net_copylist[93]
+#Copy all layers for renaming
+net_copylist = getfilelist(dir=str(out_dir), repattern='.*_copie[.](TAB|shp)$',
+                           gdbf=False, nongdbf=True)
+
+# in_net_path = net_copylist[0]
 # in_geometadata_pd = geometadata_pd
 def create_editable_lyr(in_copylyr, out_editlyr, in_encoding, overwrite):
     if (not Path(out_editlyr).exists()) or overwrite:
@@ -130,13 +134,13 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
             "Nom de l'attribut auxiliaire désignant le type d'écoulement": "type_aux",
             "Nom de l'attribut désignant le régime hydrologique": "regime",
             "Nom de l'attribut désignant la méthode d'identification de l'écoulement": "nat_id",
-            "Nom de l'attribut désignant la source de la modification, de la suppression du tronçon BD TOPO®, ou de l’ajout d’un nouveau tronçon": "orig_mo",
+            "Nom de l'attribut désignant la source de la modification; de la suppression du tronçon BD TOPO; ou de l’ajout d’un nouveau tronçon": "orig_mo",
             "Nom de l'attribut désignant la date de l'identification du type d'écoulement": "date_id"
         }
 
         for k,v in renaming_dict.items():
             if not pd.isnull(row_metadata[k]):
-                colnames_orig_list = split_strip(row_metadata[k])
+                colnames_orig_list = split_strip(row_metadata[k], sep=';')
                 for i in range(len(colnames_orig_list)):
                     if i == 0:
                         net[v] = net[colnames_orig_list[i].lower()]
@@ -154,9 +158,9 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
                                                               for col in renaming_dict.values()
                                                               if col in net.columns]),
                                                          axis=1)
-            net = net.sort_values('number_of_nonna_attricols', ascending=False).\
-                drop_duplicates('geometry', keep='first').\
-                sort_index().\
+            net = net.sort_values('number_of_nonna_attricols', ascending=False). \
+                drop_duplicates('geometry', keep='first'). \
+                sort_index(). \
                 drop('number_of_nonna_attricols', axis=1)
 
         #Recategorize TYPE_ECOUL
@@ -190,6 +194,12 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
                             return(cat_new)
                             break
 
+        #Compute number of NAs per row with formatted columns
+        colNAs_formatted = net.isnull().sum(axis=0).reset_index().\
+            rename(columns = {'index': 'attri_name',
+                              0: 'n_null'})
+        colNAs_formatted['nrows'] = len(net)
+        colNAs_formatted['dep_code'] = row_metadata['Numéro']
 
         net.loc[:, 'type_stand'] = net.apply(recat_gpdcol,
                                              in_row_metadata=row_metadata,
@@ -205,15 +215,20 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
         #Write out results
         net_proj.to_file(out_file)
 
+        return(colNAs_formatted)
+
     else:
         print('No metadata associated with this layer. Skipping.')
 
-for net_path in net_copylist[50:]:
+colNAs_formatted_dict = {}
+#in_net_path = net_copylist[6]
+for net_path in net_copylist:
     #print(net_path)
-    format_net(in_net_path=net_path,
-               in_geometadata_pd=geometadata_pd,
-               overwrite=overwrite
-               )
+    colNAs_formatted_dict[net_path] = format_net(in_net_path=net_path,
+                                                 in_geometadata_pd=geometadata_pd,
+                                                 overwrite=overwrite
+                                                 )
+pd.concat(colNAs_formatted_dict.values(), axis=0).to_csv(out_colNAs_tab)
 
 #Format Aisne -------------------------
 print('Formatting data for the Aisne department')
