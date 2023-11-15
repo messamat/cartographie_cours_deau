@@ -91,7 +91,7 @@ if not arcpy.Exists(cats_hybasdeps):
 
 #Compute area-------------------------------------
 if 'POLY_AREA' not in [f.name for f in arcpy.ListFields(cats_hybasdeps)]:
-    arcpy.management.AddGeometryAttributes(cats_hybasdeps, Geometry_Properties="AREA", Area_Unit='SQUARE_METERS')
+    arcpy.management.AddGeometryAttributes(cats_hybasdeps, Geometry_Properties="AREA", Area_Unit='SQUARE_KILOMETERS')
 
 #Create stable UID
 if 'UID_BV' not in [f.name for f in arcpy.ListFields(cats_hybasdeps)]:

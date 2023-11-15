@@ -1,7 +1,10 @@
+import arcpy.management
+
 from setup_classement import  *
 
 anci_dir = os.path.join(datdir, 'données_auxiliaires')#Ancillary data directory
 pregdb = os.path.join(resdir, 'preprocessing_ancillary_data.gdb')
+tempgdb = os.path.join(resdir, "scratch.gdb")
 
 cats_hybasdeps = os.path.join(pregdb, 'BV_hybas0809_depsinters') #BV joined to HydroBASINS and intersected with Departements
 
@@ -35,6 +38,14 @@ ce_net_ras25m = os.path.join(pregdb, 'carto_loi_eau_france_ras25m')
 #Buffer 10 m on each side (only laterally) and rasterize buffer for streams at 10 m
 ce_buf = os.path.join(pregdb, 'carto_loi_eau_france_buf10m')
 ce_buf_ras10m = os.path.join(pregdb, 'carto_loi_eau_france_bufras10m')
+
+#Project cats_hybasdeps to extract population counts
+cats_hybasdeps_LAEA = os.path.join(tempgdb, 'cats_hybasdeps_LAEA')
+pop_ras_200m = os.path.join(pregdb, 'insee_pop_interp200m')
+if not arcpy.Exists(cats_hybasdeps_LAEA):
+    arcpy.management.Project(in_dataset=cats_hybasdeps,
+                             out_dataset=cats_hybasdeps_LAEA,
+                             out_coor_system=pop_ras_200m)
 
 #Accumulate predictors-----------------------------------------------------------------------------------------------------------
 
@@ -72,8 +83,8 @@ config_dict = {
     ,'crp_pc_use': ['cell', os.path.join(lcav_dir, 'oso_crp_acc'), ce_net_prpts, 'MEAN']
     ,'scr_pc_use': ['cell', os.path.join(lcav_dir, 'oso_scr_acc'), ce_net_prpts, 'MEAN']
     ,'vny_pc_use': ['cell', os.path.join(lcav_dir, 'oso_vny_acc'), ce_net_prpts, 'MEAN']
-    ,'ppd_pk_sav': ['zonal', os.path.join(pregdb, "ppd_pk"), cats_hybasdeps, 'MEAN']
-    ,'ppd_pk_uav': ['cell', os.path.join(pregdb, "ppd_pk_acc"), ce_net_prpts, 'MEAN']
+    ,'ppc_in_sav': ['zonal', os.path.join(pregdb, 'insee_pop_interp200m'), cats_hybasdeps_LAEA, 'SUM']
+    ,'ppc_in_uav': ['cell', os.path.join(pregdb, 'insee_pop_interp200m_acc'), cats_hybasdeps_LAEA, 'SUM']
 }
 
 horizon_lims = [0, 5, 15, 30, 60, 100, 200]

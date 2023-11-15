@@ -12,7 +12,7 @@ from osgeo import gdal, osr, ogr #
 import pandas as pd #Rpd.read_excel equires optional dependency openpyxl
 from pathlib import Path
 #import pip_system_certs.wrapt_requests
-#import pygeoops
+import pygeoops
 import re
 import requests
 import shapefile
@@ -174,7 +174,7 @@ def convert_bytes_to_na(in_gpd):
             record =in_gpd.iloc[i, col]
             if not pd.isnull(record):
                 if isinstance(record, bytes):
-                    # print(col)
+                    #print(col)
                     in_gpd.iloc[i, col] = np.nan
     return(in_gpd)
 

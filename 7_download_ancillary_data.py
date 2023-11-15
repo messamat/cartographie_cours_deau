@@ -112,6 +112,10 @@ standard_download_zip(
     out_rootdir=out_dir,
     out_name="aspe")
 
+#Download Global ETOPO  --------------------------------------------------------------------------------
+#https://fred.igb-berlin.de/data/package/837
+#https://fred.igb-berlin.de/data/file_download/1692
+
 ################  Download potential drivers to relate to  #############################################################
 #Crop and Agricultural parcels (to get boundaries and crops for since 2015)----------------------------------------------------
 #https://geoservices.ign.fr/rpg
