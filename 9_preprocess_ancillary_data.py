@@ -35,6 +35,9 @@ bdforet_dir = os.path.join(anci_dir, "bdforet_v2")
 
 #Land cover
 lc_dir = os.path.join(anci_dir, 'oso')
+#Land cover - theia oso
+lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")[0]
+               for yr in [2019, 2020, 2021]}
 
 #Global aridity index
 gai_dir = os.path.join(anci_dir, 'gaiv3', 'Global-AI_v3_monthly')
@@ -231,17 +234,24 @@ if not arcpy.Exists(bdhaies_fr):
     arcpy.management.Merge(inputs=bdhaies_filelist, output=bdhaies_fr)
 
 if not arcpy.Exists(bdhaies_bvinters_tab):
+    print("Intersecting bdhaies and writing it out...")
     arcpy.analysis.Intersect([bdhaies_fr, cats_hybasdeps],
                              out_feature_class=bdhaies_bvinters,
                              join_attributes="ALL")
-    arcpy.CopyRows_management(in_rows=bdhaies_bvinters,
-                              out_table=bdhaies_bvinters_tab)
+
+    bdhaies_bvstats_dict = defaultdict(float)
+    with arcpy.da.SearchCursor(bdhaies_bvinters, ['UID_BV', 'Shape_Length', 'largeur']) as cursor:
+        for row in cursor:
+            bdhaies_bvstats_dict[row[0]] += row[1]
+
+    pd.DataFrame.from_dict(data=bdhaies_bvstats_dict, orient='index').\
+        reset_index().\
+        rename(columns={'index':'UID_BV', 0:'hedges_length'}).\
+        to_csv(bdhaies_bvinters_tab)
     arcpy.Delete_management(bdhaies_bvinters)
 
+
 #--------------------------------- Land cover --------------------------------------------------------------------------
-#Land cover - theia oso
-lc_filedict = {yr: getfilelist(os.path.join(lc_dir, "oso_{}".format(yr)),"Classif_Seed_.*[.]tif$")[0]
-               for yr in [2019, 2020, 2021]}
 #Create dictionary of classes https://www.theia-land.fr/en/product/land-cover-map/
 lc_class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw', 7:'spoil', 8:"soy", 9:"sunfl",
               10:"corn", 11:"rice", 12:"roots", 13:"pastu", 14:"orchd", 15:"vinyd", 16:"forbr", 17:"forco",
@@ -355,6 +365,9 @@ if not arcpy.Exists(irrig_coms_poly):
         #     axis=1
         # )
         # check['check'] = (check.irrig_area_com_all != check.irrig_area_dep)
+    #Convert code_com to text to be able to join it to Commune shapefile
+    irrig_comsdepsmerge_pd.loc[:, 'Code_com'] = irrig_comsdepsmerge_pd.Code_com.astype(str)
+
     #Export table
     if not arcpy.Exists(irrig_coms_formatted):
         irrig_comsdepsmerge_pd.to_csv(irrig_coms_formatted)
@@ -364,15 +377,41 @@ if not arcpy.Exists(irrig_coms_poly):
     arcpy.management.AddJoin(in_layer_or_view='coms_lyr', in_field='INSEE_COM',
                              join_table=irrig_coms_formatted, join_field='Code_com')
     arcpy.CopyFeatures_management('coms_lyr', irrig_coms_poly)
+    arcpy.AddGeometryAttributes_management(irrig_coms_poly, Geometry_Properties='AREA', Area_Unit='SQUARE_KILOMETERS')
+    arcpy.AlterField_management(irrig_coms_poly, field='POLY_AREA',
+                                new_field_name='COMMUNE_AREA', new_field_alias='COMMUNE_AREA')
+
 
 if not arcpy.Exists(irrig_coms_bvinters_tab):
     #Intersect with bv and export
     arcpy.analysis.Intersect([irrig_coms_poly, cats_hybasdeps],
                              out_feature_class=irrig_coms_bvinters,
                              join_attributes="ALL")
-    arcpy.CopyRows_management(in_rows=irrig_coms_bvinters,
+
+    arcpy.AddField_management(irrig_coms_bvinters, 'UID_COMBV', field_type='LONG')
+    with arcpy.da.UpdateCursor(irrig_coms_bvinters, ['UID_COMBV', 'OID@']) as cursor:
+        for row in cursor:
+            row[0] = row[1]
+            cursor.updateRow(row)
+
+    irrig_coms_lcstats_tab = os.path.join(tempgdb, 'irrig_coms_bvinters_lc2020')
+    TabulateArea(in_zone_data=irrig_coms_bvinters,
+                 zone_field='UID_COMBV',
+                 in_class_data=lc_filedict[2020],
+                 class_field='Value',
+                 out_table=irrig_coms_lcstats_tab ,
+                 classes_as_rows='CLASSES_AS_FIELDS')
+
+    arcpy.MakeFeatureLayer_management(irrig_coms_bvinters, 'irrig_coms_bvinters_lyr')
+    arcpy.AddJoin_management('irrig_coms_bvinters_lyr',
+                             in_field='UID_COMBV',
+                             join_table=irrig_coms_lcstats_tab ,
+                             join_field='UID_COMBV',
+                             join_type='KEEP_ALL')
+    arcpy.CopyRows_management(in_rows='irrig_coms_bvinters_lyr',
                               out_table=irrig_coms_bvinters_tab)
     arcpy.Delete_management(irrig_coms_bvinters)
+    arcpy.Delete_management(irrig_coms_lcstats_tab)
 
 #--------------------------------- Create barrier points --------------------------------------------------------------
 if not arcpy.Exists(barriers_pts_proj):
