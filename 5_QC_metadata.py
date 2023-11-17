@@ -6,6 +6,8 @@ datdir = Path(datdir)
 #Read compilation of metadata
 geometadata_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
 geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_réseau_SIG')
+#Remove duplicate layers (for Ile-de-France)
+geometadata_pd = geometadata_pd.loc[~(geometadata_pd['Lien local données'].duplicated())]
 
 #Create output directory
 out_dir = Path(resdir, 'reseaux_departementaux_copies')
