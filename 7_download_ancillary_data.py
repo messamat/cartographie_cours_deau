@@ -243,21 +243,19 @@ if not os.path.exists(out_bnpe_unzipped_path):
 
     api_ouvrage_count = requests.get("https://hubeau.eaufrance.fr/api/v1/prelevements/referentiel/ouvrages?&size=2").json()["count"]
 
-    while api_ouvrage_code==206:
-        out_bnpe_page = "{0}_20231107_{1}.csv".format(os.path.splitext(out_bnpe_unzipped_path)[0], page_ouvrage)
-
-        if not os.path.exists(out_bnpe_page):
-            api_ouvrage = requests.get("https://hubeau.eaufrance.fr/api/v1/prelevements/referentiel/ouvrages.csv?"
-                                        "bbox=-10.0&bbox=35.0&bbox=15.0&bbox=50&page={}".format(page_ouvrage))
-            print("Requesting page {}".format(page_ouvrage))
-            print("Saving {}...".format(os.path.split(out_bnpe_page)[1]))
-            with open(out_bnpe_page, "w", encoding="utf-8") as f:
-                    f.write(api_ouvrage.text)
-                    f.close()
-            api_ouvrage_code = api_ouvrage.status_code
-        else:
-            print("{} already exists. Skipping...".format(os.path.split(out_bnpe_page)[1]))
-        page_ouvrage += 1
+    for i in range(1, 96):
+        if i != 20:
+            out_bnpe_page = "{0}_20231107_{1}.csv".format(os.path.splitext(out_bnpe_unzipped_path)[0], i)
+            if not os.path.exists(out_bnpe_page):
+                api_ouvrage = requests.get("https://hubeau.eaufrance.fr/api/v1/prelevements/referentiel/ouvrages.csv?code_departement={}&size=20000".format(str(i).zfill(2))),
+                #print("Requesting department {}".format(i))
+                print("Saving {}...".format(os.path.split(out_bnpe_page)[1]))
+                with open(out_bnpe_page, "w", encoding="utf-8") as f:
+                        f.write(api_ouvrage[0].text)
+                        f.close()
+                api_ouvrage_code = api_ouvrage[0].status_code
+            else:
+                print("{} already exists. Skipping...".format(os.path.split(out_bnpe_page)[1]))
 
     tab_pages_list = list(Path(bnpe_dir).glob("{}_20231107_*.csv".format(
         os.path.splitext(os.path.split(out_bnpe_unzipped_path)[1])[0])))
@@ -271,31 +269,61 @@ if not os.path.exists(out_bnpe_unzipped_path):
     for filename in tab_pages_list:
         os.remove(filename)
 
+#Download points de prélèvements
+out_bnpe_prelevements_unzipped_path = os.path.join(bnpe_dir, 'bnpe_prelevements.csv')
+
+if not os.path.exists(out_bnpe_prelevements_unzipped_path):
+    api_prelevements_count = requests.get("https://hubeau.eaufrance.fr/api/v1/prelevements/referentiel/points_prelevement?size=20").json()['count']
+
+    for i in range(1, 96):
+        if i != 20:
+            out_bnpe_page = "{0}_20231107_{1}.csv".format(os.path.splitext(out_bnpe_prelevements_unzipped_path)[0], i)
+            if not os.path.exists(out_bnpe_page):
+                api_prelevements = requests.get("https://hubeau.eaufrance.fr/api/v1/prelevements/referentiel/points_prelevement.csv?code_departement={}&size=20000".format(str(i).zfill(2))),
+                #print("Requesting department {}".format(i))
+                print("Saving {}...".format(os.path.split(out_bnpe_page)[1]))
+                with open(out_bnpe_page, "w", encoding="utf-8") as f:
+                        f.write(api_prelevements[0].text)
+                        f.close()
+                api_ouvrage_code = api_prelevements[0].status_code
+            else:
+                print("{} already exists. Skipping...".format(os.path.split(out_bnpe_page)[1]))
+
+    tab_pages_list = list(Path(bnpe_dir).glob("{}_20231107_*.csv".format(
+        os.path.splitext(os.path.split(out_bnpe_prelevements_unzipped_path)[1])[0])))
+    bnpe_pdlist = []
+    for filename in tab_pages_list:
+        print('Reading {}...'.format(filename))
+        df_bnpe = pd.read_csv(filename, encoding='utf-8', sep=";")
+        bnpe_pdlist.append(df_bnpe)
+    bnpe_pdall = pd.concat(bnpe_pdlist, axis=0, ignore_index=True)
+    bnpe_pdall.to_csv(out_bnpe_prelevements_unzipped_path)
+    for filename in tab_pages_list:
+        os.remove(filename)
+
+
 #Download chroniques
 out_bnpe_chroniques_unzipped_path = os.path.join(bnpe_dir, 'bnpe_chroniques.csv')
 
 if not os.path.exists(out_bnpe_chroniques_unzipped_path):
-    api_chroniques_code = 206
-    page_chroniques = 1
+    for i in range(1, 96):
+        if i != 20:
+            for annee in range(2015, 2022):
+                out_chronique_page = "{0}_20231107_{1}_{2}.csv".format(
+                    os.path.splitext(out_bnpe_chroniques_unzipped_path)[0], i, annee)
 
-    api_chroniques_count = requests.get("https://hubeau.eaufrance.fr/api/v1/prelevements/chroniques?&size=2").json()["count"]
-
-    while api_chroniques_code==206:
-        out_bnpe_page = "{0}_20231107_{1}.csv".format(os.path.splitext(out_bnpe_chroniques_unzipped_path)[0],
-                                                      page_chroniques)
-
-        if not os.path.exists(out_bnpe_page):
-            api_chroniques = requests.get("https://hubeau.eaufrance.fr/api/v1/prelevements/chroniques.csv?"
-                                        "bbox=-10.0&bbox=35.0&bbox=15.0&bbox=50&page={}".format(page_chroniques))
-            print("Requesting page {}".format(page_chroniques))
-            print("Saving {}...".format(os.path.split(out_bnpe_page)[1]))
-            with open(out_bnpe_page, "w", encoding="utf-8") as f:
-                    f.write(api_chroniques.text)
-                    f.close()
-            api_chroniques_code = api_chroniques.status_code
-        else:
-            print("{} already exists. Skipping...".format(os.path.split(out_bnpe_page)[1]))
-        page_chroniques += 1
+                if not os.path.exists(out_chronique_page):
+                    api_chroniques = requests.get(
+                        "https://hubeau.eaufrance.fr/api/v1/prelevements/chroniques.csv?annee={0}&code_departement={1}&size=20000".format(
+                            annee, str(i).zfill(2))),
+                    #print("Requesting department {}".format(i))
+                    print("Saving {}...".format(os.path.split(out_chronique_page)[1]))
+                    with open(out_chronique_page, "w", encoding="utf-8") as f:
+                            f.write(api_chroniques[0].text)
+                            f.close()
+                    api_chroniques_code = api_chroniques[0].status_code
+                else:
+                    print("{} already exists. Skipping...".format(os.path.split(out_chronique_page)[1]))
 
     tab_pages_list = list(Path(bnpe_dir).glob("{}_20231107_*.csv".format(
         os.path.splitext(os.path.split(out_bnpe_chroniques_unzipped_path)[1])[0])))

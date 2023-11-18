@@ -1,4 +1,6 @@
 import arcpy.analysis
+import pandas as pd
+
 from setup_classement import  *
 
 anci_dir = os.path.join(datdir, "données_auxiliaires") #Ancillary data directory
@@ -51,7 +53,7 @@ bdtopo2023_dir = os.path.join(anci_dir, "bdtopo233") #233 is the version/package
 "reservoir"
 
 #Withdrawal points - bnpe
-withdrawal_stations_bnpe=os.path.join(anci_dir, "bnpe", "bnpe_ouvrages.csv")
+withdrawal_ts_bnpe=os.path.join(anci_dir, "bnpe", "bnpe_chroniques.csv")
 
 #Farm parcels - rpg
 farm_parcels = os.path.join(anci_dir, "ign_rpg", "RPG_2-0__GPKG_LAMB93_FXX_2022-01-01", "RPG",
@@ -73,7 +75,9 @@ hydrobio_stations = os.path.join(anci_dir,"naiade", "stations.csv")
 onde_filelist = getfilelist(os.path.join(anci_dir, "onde"), "onde_france_[0-9]{4}[.]csv$")
 
 #Snelder intermittence
-snelder_ires = os.path.join(anci_dir, "snelder", "rhtvs2_all_phi_qclass.shp")
+snelder_dir = os.path.join(anci_dir, "snelder")
+snelder_rht = os.path.join(snelder_dir, "rhtvs2_all_phi_qclass.shp")
+snelder_ires = os.path.join(snelder_dir, 'INT_RF.txt')
 
 #-------------------------------- OUTPUTS ------------------------------------------------------------------------------
 #Scratch gdb
@@ -96,9 +100,9 @@ bdalti_slope = os.path.join(pregdb, "bdalti_25m_slope")
 bdalti_tcurvature = os.path.join(pregdb, "bdalti_25m_curvature_tangential")
 bdalti_pcurvature = os.path.join(pregdb, "bdalti_25m_curvature_profile")
 
-bdcharm_fr = os.path.join(pregdb, "lithology_bdcharm_fr")
-bdcharm_bvinters = os.path.join(pregdb, "lithology_bdcharm_fr_bvinters")
-bdcharm_bvinters_tab = os.path.join(resdir, "lithology_bdcharm_fr_bvinters.csv")
+bdcharm_fr = os.path.join(pregdb, "GEO050K_HARM_merge")
+bdcharm_bvinters = os.path.join(pregdb, "GEO050K_HARM_merge_bvinters")
+bdcharm_bvinters_tab = os.path.join(resdir, "GEO050K_HARM_merge_bvinters.csv")
 
 bdforet_fr = os.path.join(pregdb, "bdforet_fr")
 bdforet_bvinters = os.path.join(pregdb, "bdforet_fr_bvinters")
@@ -119,7 +123,7 @@ gai_summer = os.path.join(pregdb, "ai_v3_summerav")
 irrig_coms_formatted = os.path.join(resdir, "agreste_irrig_deps_formatted.csv")
 irrig_coms_poly = os.path.join(pregdb, "communes_irrig")
 irrig_coms_bvinters = os.path.join(pregdb, "communes_irrig_bvinters")
-irrig_coms_bvinters_tab = os.path.join(resdir, "communes_irrig_bvinters.csv")
+irrig_coms_bvinters_tab = os.path.join(resdir, "com_irrig_bvinters.csv")
 
 barriers_pts_proj = os.path.join(pregdb, 'barriers_amber_proj')
 barriers_pts_bvinters = os.path.join(pregdb, 'barriers_amber_bvinters')
@@ -133,8 +137,10 @@ onde_stations_pts = os.path.join(pregdb, "onde_stations")
 onde_stations_pts_bvinters = os.path.join(pregdb, "onde_stations_bvinters")
 onde_stations_pts_bvinters_tab = os.path.join(resdir, "onde_stations_bvinters.csv")
 
-snelder_ires_bvinters = os.path.join(tempgdb, "snelder_ires_bvinters")
-snelder_ires_bvinters_tab = os.path.join(resdir, "snelder_ires_bvinters.csv")
+snelder_outnet = os.path.join(pregdb, 'rht_snelder_join')
+snelder_outnet_lambert = os.path.join(pregdb, 'rht_snelder_join_lambert')
+snelder_bvinters = os.path.join(tempgdb, 'snelder_ires_bvinters')
+snelder_bvinters_tab = os.path.join(resdir, 'snelder_ires_bvinters.csv')
 
 fish_stations_pts = os.path.join(pregdb, 'fish_stations_aspe')
 hydrobio_stations_pts = os.path.join(pregdb, "hydrobio_stations_naiade")
@@ -201,6 +207,8 @@ if not arcpy.Exists(bdalti_pcurvature):
 if not arcpy.Exists(bdcharm_fr):
     print("Processing {}...".format(bdcharm_fr))
     bdcharm_filelist = getfilelist(bdcharm_dir, "^GEO050K_HARM_[0-9]{3}_S_FGEOL_2154[.]shp$")
+    bdcharm_filelist.append(os.path.join(bdcharm_dir, 'GEO050K_HARM_IDF_S_FGEOL_2154.shp'))
+    bdcharm_filelist.append(os.path.join(bdcharm_dir, 'GEO050K_HARM_NPC_S_FGEOL_2154.shp'))
     arcpy.management.Merge(inputs=bdcharm_filelist, output=bdcharm_fr)
 
 if not arcpy.Exists(bdcharm_bvinters_tab):
@@ -433,11 +441,20 @@ if not arcpy.Exists(barriers_pts_bvinters_tab):
 
 #--------------------------------- Create water withdrawal points  -----------------------------------------------------
 if not arcpy.Exists(withdrawal_pts_proj):
-    withdrawal_pts = os.path.join(pregdb, 'withdrawal_bnpe_wgs84')
-    arcpy.management.XYTableToPoint(in_table=withdrawal_stations_bnpe, out_feature_class=withdrawal_pts,
-                                    x_field='longitude', y_field='latitude',
-                                    coordinate_system=arcpy.SpatialReference(4326))
+    withdrawal_pts = os.path.join(resdir, 'withdrawal_bnpe.shp')
+
+    bnpe_ts_df = pd.read_csv(withdrawal_ts_bnpe).\
+        drop_duplicates('code_ouvrage')
+    bnpe_ts_df.drop(columns=[col for col in bnpe_ts_df.columns if col not in ['code_ouvrage', 'longitude', 'latitude']],
+                    inplace=True)
+    bnpe_ts_gdf = gpd.GeoDataFrame(
+        bnpe_ts_df, geometry=gpd.points_from_xy(bnpe_ts_df.longitude, bnpe_ts_df.latitude)
+    )
+    bnpe_ts_gdf.to_file(withdrawal_pts)
+
+    arcpy.DefineProjection_management(withdrawal_pts, arcpy.SpatialReference(4326))
     arcpy.management.Project(withdrawal_pts, withdrawal_pts_proj, out_coor_system=sr_template)
+    arcpy.AlterField_management(withdrawal_pts_proj, 'code_ouvra', 'code_ouvrage')
     arcpy.Delete_management(withdrawal_pts)
 
 if not arcpy.Exists(withdrawal_pts_bvinters_tab):
@@ -474,14 +491,27 @@ if not arcpy.Exists(onde_stations_pts_bvinters_tab):
     arcpy.Delete_management(onde_stations_pts_bvinters)
 
 #--------------------------------- Snelder intersection  --------------------------------------------------------------
-if not arcpy.Exists(snelder_ires_bvinters_tab):
+if not arcpy.Exists(snelder_bvinters_tab):
+    # Join original French river network data with Snelder et al.' predictions
+    arcpy.MakeFeatureLayer_management(snelder_rht, out_layer='snelder_rht_lyr')
+    arcpy.AddJoin_management(in_layer_or_view='snelder_rht_lyr', in_field='ID_DRAIN',
+                             join_table=snelder_ires, join_field='AllPred$ID_DRAIN')
+    arcpy.CopyFeatures_management(in_features='snelder_rht_lyr', out_feature_class=snelder_outnet)
+
+    arcpy.DefineProjection_management(in_dataset=snelder_outnet,
+                                      coor_system=arcpy.SpatialReference(2192))  # ED_1950_France_EuroLambert
+
+    arcpy.Project_management(in_dataset=snelder_outnet,
+                             out_dataset=snelder_outnet_lambert,
+                             out_coor_system=sr_template)
+
     #Intersect with bv and export
-    arcpy.analysis.Intersect([snelder_ires, cats_hybasdeps],
-                             out_feature_class=snelder_ires_bvinters,
+    arcpy.analysis.Intersect([snelder_outnet_lambert, cats_hybasdeps],
+                             out_feature_class=snelder_bvinters,
                              join_attributes="ALL")
-    arcpy.CopyRows_management(in_rows=snelder_ires_bvinters,
-                              out_table=snelder_ires_bvinters_tab)
-    arcpy.Delete_management(snelder_ires_bvinters)
+    arcpy.CopyRows_management(in_rows=snelder_bvinters,
+                              out_table=snelder_bvinters_tab)
+    arcpy.Delete_management(snelder_bvinters)
 
 #--------------------------------- Create fish station points  ---------------------------------------------------------
 if not arcpy.Exists(fish_stations_pts):
