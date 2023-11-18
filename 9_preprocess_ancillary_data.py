@@ -454,7 +454,6 @@ if not arcpy.Exists(withdrawal_pts_proj):
 
     arcpy.DefineProjection_management(withdrawal_pts, arcpy.SpatialReference(4326))
     arcpy.management.Project(withdrawal_pts, withdrawal_pts_proj, out_coor_system=sr_template)
-    arcpy.AlterField_management(withdrawal_pts_proj, 'code_ouvra', 'code_ouvrage')
     arcpy.Delete_management(withdrawal_pts)
 
 if not arcpy.Exists(withdrawal_pts_bvinters_tab):
@@ -462,9 +461,17 @@ if not arcpy.Exists(withdrawal_pts_bvinters_tab):
     arcpy.analysis.Intersect([withdrawal_pts_proj, cats_hybasdeps],
                              out_feature_class=withdrawal_pts_bvinters,
                              join_attributes="ALL")
-    arcpy.CopyRows_management(in_rows=withdrawal_pts_bvinters,
-                              out_table=withdrawal_pts_bvinters_tab)
-    arcpy.Delete_management(withdrawal_pts_bvinters)
+    # arcpy.CopyRows_management(in_rows=withdrawal_pts_bvinters,
+    #                           out_table=withdrawal_pts_bvinters_tab)
+    #For some reason, CopyRows leads to 0 in code_ouvrage
+    pd.DataFrame.from_dict({row[0]:row[1] for row in
+                  arcpy.da.SearchCursor(withdrawal_pts_bvinters, ['UID_BV', 'code_ouvrage'])},
+                           orient='index').\
+        reset_index().\
+        rename(columns={'index':'UID_BV', 0:'code_ouvrage'}).\
+        to_csv(withdrawal_pts_bvinters_tab)
+
+    #arcpy.Delete_management(withdrawal_pts_bvinters)
 
 #--------------------------------- Create ONDE points  ---------------------------------------------------------
 if not arcpy.Exists(onde_stations_pts):
