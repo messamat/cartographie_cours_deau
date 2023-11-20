@@ -46,6 +46,7 @@ ce_net = os.path.join(outputs_gdb, 'carto_loi_eau_fr')
 #------------- OUTPUTS ---------------------------------------------------------------------------------------------
 cats_hybasjoin = os.path.join(pregdb, 'BV_hybas0809_join') #Bassins versants topographiques (catchments) spatially jointed to HydroBASINS levels 8 and 9
 cats_hybasdeps = os.path.join(pregdb, 'BV_hybas0809_depsinters') #BV joined to HydroBASINS and intersected with Departements
+cats_hybasdeps_tab = os.path.join(resdir, 'BV_hybas0809_depsinters.csv')
 
 bcae_fr = os.path.join(pregdb, 'bcae_fr')
 bdtopo2015_fr = os.path.join(pregdb, 'bdtopo2015_fr')
@@ -100,6 +101,11 @@ if 'UID_BV' not in [f.name for f in arcpy.ListFields(cats_hybasdeps)]:
         for row in cursor:
             row[0] = row[1]
             cursor.updateRow(row)
+
+#Export table
+if not arcpy.Exists(cats_hybasdeps_tab):
+    arcpy.CopyRows_management(in_rows=cats_hybasdeps,
+                              out_table=cats_hybasdeps_tab)
 
 #------------- PREPARE NETWORKS ----------------------------------------------------------------------------------------
 #Merge BCAE
