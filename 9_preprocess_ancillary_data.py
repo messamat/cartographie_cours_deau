@@ -215,9 +215,23 @@ if not arcpy.Exists(bdcharm_bvinters_tab):
     arcpy.analysis.Intersect([bdcharm_fr, cats_hybasdeps],
                              out_feature_class=bdcharm_bvinters,
                              join_attributes="ALL")
-    arcpy.CopyRows_management(in_rows=bdcharm_bvinters,
-                              out_table=bdcharm_bvinters_tab)
+
+    bdcharm_bvstats_dict = defaultdict(float)
+    with arcpy.da.SearchCursor(bdcharm_bvinters, ['OID@', 'UID_BV', 'NOTATION','INSEE_DEP','Shape_Area']) as cursor: #Other fields are badly entered
+        for row in cursor:
+            bdcharm_bvstats_dict[row[0]] = [row[1], row[2], row[3], row[4]]
+
+    pd.DataFrame.from_dict(data=bdcharm_bvstats_dict, orient='index'). \
+        rename(columns={0: 'UID_BV', 1: 'NOTATION',2:'INSEE_DEP',3:'Shape_Area'}). \
+        to_csv(bdcharm_bvinters_tab, index=False)
     arcpy.Delete_management(bdcharm_bvinters)
+
+#-------------------------------- Soils - bdgsf ------------------------------------------------------------------------
+
+
+#Dominant soil type 1:1,000,000
+bdgsf = os.path.join(anci_dir, "bdgsf", "30169_L93", "30169_L93.shp")
+
 
 #--------------------------------- Forest type - BD foret  -------------------------------------------------------------
 if not arcpy.Exists(bdforet_fr):
@@ -464,12 +478,11 @@ if not arcpy.Exists(withdrawal_pts_bvinters_tab):
     # arcpy.CopyRows_management(in_rows=withdrawal_pts_bvinters,
     #                           out_table=withdrawal_pts_bvinters_tab)
     #For some reason, CopyRows leads to 0 in code_ouvrage
-    pd.DataFrame.from_dict({row[0]:row[1] for row in
-                  arcpy.da.SearchCursor(withdrawal_pts_bvinters, ['UID_BV', 'code_ouvrage'])},
+    pd.DataFrame.from_dict({row[0]:[row[1], row[2]] for row in
+                  arcpy.da.SearchCursor(withdrawal_pts_bvinters, ['OID@', 'UID_BV', 'code_ouvrage'])},
                            orient='index').\
-        reset_index().\
-        rename(columns={'index':'UID_BV', 0:'code_ouvrage'}).\
-        to_csv(withdrawal_pts_bvinters_tab)
+        rename(columns={0:'UID_BV', 1:'code_ouvrage'}).\
+        to_csv(withdrawal_pts_bvinters_tab, index=False)
 
     #arcpy.Delete_management(withdrawal_pts_bvinters)
 
