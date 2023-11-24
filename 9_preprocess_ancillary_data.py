@@ -5,7 +5,7 @@ from setup_classement import  *
 
 anci_dir = os.path.join(datdir, "données_auxiliaires") #Ancillary data directory
 pregdb = os.path.join(resdir, "preprocessing_ancillary_data.gdb") #Preprocessing geodatabase
-
+tempgdb = os.path.join(resdir, "scratch.gdb")
 #------------------------------------------- UNITS OF ANALYSIS ---------------------------------------------------------
 #Departments and communes - admin express
 admin_dir = os.path.join(anci_dir, "admin_express", "ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16",
@@ -79,13 +79,13 @@ snelder_dir = os.path.join(anci_dir, "snelder")
 snelder_rht = os.path.join(snelder_dir, "rhtvs2_all_phi_qclass.shp")
 snelder_ires = os.path.join(snelder_dir, 'INT_RF.txt')
 
-#-------------------------------- OUTPUTS ------------------------------------------------------------------------------
-#Scratch gdb
-tempgdb = os.path.join(resdir, "scratch.gdb")
-if not arcpy.Exists(tempgdb):
-    arcpy.CreateFileGDB_management(out_folder_path=os.path.split(tempgdb)[0],
-                                   out_name=os.path.split(tempgdb)[1])
+#BD topo
+bdtopo2015_fr = os.path.join(pregdb, 'bdtopo2015_fr')
+#DDT network
+outputs_gdb = os.path.join(resdir, 'analysis_outputs.gdb')
+ce_net = os.path.join(outputs_gdb, 'carto_loi_eau_fr')
 
+#-------------------------------- OUTPUTS ------------------------------------------------------------------------------
 #gdb to hold land cover statistics
 lcav_dir = os.path.join(resdir, 'oso_lc_stats')
 if not arcpy.Exists(lcav_dir):
@@ -134,6 +134,11 @@ withdrawal_pts_bvinters = os.path.join(pregdb, "withdrawals_bnpe_proj_bvinters")
 withdrawal_pts_bvinters_tab = os.path.join(resdir, "withdrawals_bnpe_proj_bvinters.csv")
 
 onde_stations_pts = os.path.join(pregdb, "onde_stations")
+onde_ddtnet_spjoin = os.path.join(pregdb, 'onde_carto_loi_eau_spjoin')
+onde_ddtnet_spjoin_tab = os.path.join(resdir, 'onde_carto_loi_eau_spjoin.csv')
+onde_bdtopo_spjoin = os.path.join(pregdb, 'onde_bdtopo_spjoin')
+onde_bdtopo_spjoin_tab = os.path.join(resdir, 'onde_bdtopo_spjoin.csv')
+
 onde_stations_pts_bvinters = os.path.join(pregdb, "onde_stations_bvinters")
 onde_stations_pts_bvinters_tab = os.path.join(resdir, "onde_stations_bvinters.csv")
 
@@ -143,7 +148,16 @@ snelder_bvinters = os.path.join(tempgdb, 'snelder_ires_bvinters')
 snelder_bvinters_tab = os.path.join(resdir, 'snelder_ires_bvinters.csv')
 
 fish_stations_pts = os.path.join(pregdb, 'fish_stations_aspe')
+fish_ddtnet_spjoin = os.path.join(pregdb, 'fish_stations_aspe_carto_loi_eau_spjoin')
+fish_ddtnet_spjoin_tab = os.path.join(resdir, 'fish_stations_aspe_carto_loi_eau_spjoin.csv')
+fish_bdtopo_spjoin = os.path.join(pregdb, 'fish_stations_aspe_bdtopo_spjoin')
+fish_bdtopo_spjoin_tab = os.path.join(resdir, 'fish_stations_aspe_bdtopo_spjoin.csv')
+
 hydrobio_stations_pts = os.path.join(pregdb, "hydrobio_stations_naiade")
+hydrobio_ddtnet_spjoin = os.path.join(pregdb, 'hydrobio_stations_naiade_carto_loi_eau_spjoin')
+hydrobio_ddtnet_spjoin_tab = os.path.join(resdir, 'hydrobio_stations_naiade_carto_loi_eau_spjoin.csv')
+hydrobio_bdtopo_spjoin = os.path.join(pregdb, 'hydrobio_stations_naiade_bdtopo_spjoin')
+hydrobio_bdtopo_spjoin_tab = os.path.join(resdir, 'hydrobio_stations_naiade_bdtopo_spjoin.csv')
 
 buildings_filtered_fr = os.path.join(pregdb, "buildings_filtered_fr")
 buildings_popvariable =os.path.join(pregdb, "buildings_pop_nivNaturel_inters")
@@ -215,20 +229,12 @@ if not arcpy.Exists(bdcharm_bvinters_tab):
     arcpy.analysis.Intersect([bdcharm_fr, cats_hybasdeps],
                              out_feature_class=bdcharm_bvinters,
                              join_attributes="ALL")
-
-    bdcharm_bvstats_dict = defaultdict(float)
-    with arcpy.da.SearchCursor(bdcharm_bvinters, ['OID@', 'UID_BV', 'NOTATION','INSEE_DEP','Shape_Area']) as cursor: #Other fields are badly entered
-        for row in cursor:
-            bdcharm_bvstats_dict[row[0]] = [row[1], row[2], row[3], row[4]]
-
-    pd.DataFrame.from_dict(data=bdcharm_bvstats_dict, orient='index'). \
-        rename(columns={0: 'UID_BV', 1: 'NOTATION',2:'INSEE_DEP',3:'Shape_Area'}). \
-        to_csv(bdcharm_bvinters_tab, index=False)
+    CopyRows_pd(in_table=bdcharm_bvinters,
+                out_table=bdcharm_bvinters_tab,
+                fields_to_copy=['UID_BV', 'NOTATION','INSEE_DEP','Shape_Area'])
     arcpy.Delete_management(bdcharm_bvinters)
 
 #-------------------------------- Soils - bdgsf ------------------------------------------------------------------------
-
-
 #Dominant soil type 1:1,000,000
 bdgsf = os.path.join(anci_dir, "bdgsf", "30169_L93", "30169_L93.shp")
 
@@ -260,16 +266,9 @@ if not arcpy.Exists(bdhaies_bvinters_tab):
     arcpy.analysis.Intersect([bdhaies_fr, cats_hybasdeps],
                              out_feature_class=bdhaies_bvinters,
                              join_attributes="ALL")
-
-    bdhaies_bvstats_dict = defaultdict(float)
-    with arcpy.da.SearchCursor(bdhaies_bvinters, ['UID_BV', 'Shape_Length', 'largeur']) as cursor:
-        for row in cursor:
-            bdhaies_bvstats_dict[row[0]] += row[1]
-
-    pd.DataFrame.from_dict(data=bdhaies_bvstats_dict, orient='index').\
-        reset_index().\
-        rename(columns={'index':'UID_BV', 0:'hedges_length'}).\
-        to_csv(bdhaies_bvinters_tab)
+    CopyRows_pd(in_table=bdhaies_bvinters,
+                out_table=bdhaies_bvinters_tab,
+                fields_to_copy={'UID_BV':'UID_BV', 'Shape_Length':'hedges_length', 'largeur':'largeur'})
     arcpy.Delete_management(bdhaies_bvinters)
 
 
@@ -486,30 +485,6 @@ if not arcpy.Exists(withdrawal_pts_bvinters_tab):
 
     #arcpy.Delete_management(withdrawal_pts_bvinters)
 
-#--------------------------------- Create ONDE points  ---------------------------------------------------------
-if not arcpy.Exists(onde_stations_pts):
-    onde_catpd = pd.concat(
-        [pd.read_csv(onde_yr) for onde_yr in onde_filelist]
-    )
-    onde_catpd.columns = [re.sub('[<>]', '', col) for col in onde_catpd.columns]
-
-    onde_cat = os.path.join(resdir, "onde_obs_all.csv")
-    onde_catpd.to_csv(onde_cat)
-
-    arcpy.management.XYTableToPoint(in_table=onde_cat, out_feature_class=onde_stations_pts,
-                                    x_field='CoordXSiteHydro', y_field='CoordYSiteHydro',
-                                    coordinate_system=sr_template)
-    arcpy.management.DeleteIdentical(in_dataset=onde_stations_pts, fields='Shape', xy_tolerance='1 meter')
-
-if not arcpy.Exists(onde_stations_pts_bvinters_tab):
-    #Intersect with bv and export
-    arcpy.analysis.Intersect([onde_stations_pts, cats_hybasdeps],
-                             out_feature_class=onde_stations_pts_bvinters,
-                             join_attributes="ALL")
-    arcpy.CopyRows_management(in_rows=onde_stations_pts_bvinters,
-                              out_table=onde_stations_pts_bvinters_tab)
-    arcpy.Delete_management(onde_stations_pts_bvinters)
-
 #--------------------------------- Snelder intersection  --------------------------------------------------------------
 if not arcpy.Exists(snelder_bvinters_tab):
     # Join original French river network data with Snelder et al.' predictions
@@ -533,11 +508,107 @@ if not arcpy.Exists(snelder_bvinters_tab):
                               out_table=snelder_bvinters_tab)
     arcpy.Delete_management(snelder_bvinters)
 
+#--------------------------------- Create ONDE points  ---------------------------------------------------------
+if not arcpy.Exists(onde_stations_pts):
+    onde_catpd = pd.concat(
+        [pd.read_csv(onde_yr) for onde_yr in onde_filelist]
+    )
+    onde_catpd.columns = [re.sub('[<>]', '', col) for col in onde_catpd.columns]
+
+    onde_cat = os.path.join(resdir, "onde_obs_all.csv")
+    onde_catpd.to_csv(onde_cat)
+
+    arcpy.management.XYTableToPoint(in_table=onde_cat, out_feature_class=onde_stations_pts,
+                                    x_field='CoordXSiteHydro', y_field='CoordYSiteHydro',
+                                    coordinate_system=sr_template)
+    arcpy.management.DeleteIdentical(in_dataset=onde_stations_pts, fields='Shape', xy_tolerance='1 meter')
+
+if not arcpy.Exists(onde_ddtnet_spjoin):
+    arcpy.SpatialJoin_analysis(
+        arcpy.MakeFeatureLayer_management(onde_stations_pts, 'onde_pts_lyr',
+                                          where_clause="CdDepartement NOT IN ('2A', '2B')"),
+        join_features=ce_net,
+        out_feature_class=onde_ddtnet_spjoin,
+        join_operation='JOIN_ONE_TO_ONE',
+        join_type='KEEP_ALL',
+        match_option='CLOSEST',
+        search_radius=1000,
+        distance_field_name='dist_to_ddtnet'
+    )
+
+    CopyRows_pd(in_table=onde_ddtnet_spjoin, out_table=onde_ddtnet_spjoin_tab,
+                fields_to_copy=['CdSiteHydro', 'UID_CE', 'dist_to_ddtnet'])
+
+if not arcpy.Exists(onde_bdtopo_spjoin):
+    arcpy.SpatialJoin_analysis(
+        arcpy.MakeFeatureLayer_management(onde_stations_pts, 'onde_pts_lyr',
+                                          where_clause="CdDepartement NOT IN ('2A', '2B')"),
+        join_features=bdtopo2015_fr,
+        out_feature_class=onde_bdtopo_spjoin,
+        join_operation='JOIN_ONE_TO_ONE',
+        join_type='KEEP_ALL',
+        match_option='CLOSEST',
+        search_radius=1000,
+        distance_field_name='dist_to_bdtopo'
+    )
+
+    CopyRows_pd(in_table=onde_bdtopo_spjoin, out_table=onde_bdtopo_spjoin_tab,
+                fields_to_copy=['CdSiteHydro', 'ID', 'dist_to_bdtopo'])
+
+#Manual checking ONDE sites that are on a BD Topo or BD carthage segment but not on a DDT segment by looking at all those
+#beyong 30 m from a DDT segment
+#CdSiteHydro: H5122351, M1060001, M1050001, V7300001, F4620002, V5220001,
+# P1130001,P3110001, P1560002, P3322511, P3800001, P3800002, P1560002,
+
+
+# if not arcpy.Exists(onde_stations_pts_bvinters_tab):
+#     #Intersect with bv and export
+#     arcpy.analysis.Intersect([onde_stations_pts, cats_hybasdeps],
+#                              out_feature_class=onde_stations_pts_bvinters,
+#                              join_attributes="ALL")
+#     arcpy.CopyRows_management(in_rows=onde_stations_pts_bvinters,
+#                               out_table=onde_stations_pts_bvinters_tab)
+#     arcpy.Delete_management(onde_stations_pts_bvinters)
+
 #--------------------------------- Create fish station points  ---------------------------------------------------------
 if not arcpy.Exists(fish_stations_pts):
     arcpy.management.XYTableToPoint(in_table=fish_stations, out_feature_class=fish_stations_pts,
                                     x_field='sta_coordonnees_x', y_field='sta_coordonnees_y',
                                     coordinate_system=sr_template)
+
+if not arcpy.Exists(fish_ddtnet_spjoin):
+    arcpy.SpatialJoin_analysis(
+        target_features=fish_stations_pts,
+        join_features=ce_net,
+        out_feature_class=fish_ddtnet_spjoin,
+        join_operation='JOIN_ONE_TO_ONE',
+        join_type='KEEP_ALL',
+        match_option='CLOSEST',
+        search_radius=1000,
+        distance_field_name='dist_to_ddtnet'
+    )
+
+    CopyRows_pd(in_table=fish_ddtnet_spjoin, out_table=fish_ddtnet_spjoin_tab,
+                fields_to_copy=['sta_id', 'UID_CE', 'dist_to_ddtnet'])
+
+if not arcpy.Exists(fish_bdtopo_spjoin):
+    arcpy.SpatialJoin_analysis(
+        target_features=fish_stations_pts,
+        join_features=bdtopo2015_fr,
+        out_feature_class=fish_bdtopo_spjoin,
+        join_operation='JOIN_ONE_TO_ONE',
+        join_type='KEEP_ALL',
+        match_option='CLOSEST',
+        search_radius=1000,
+        distance_field_name='dist_to_bdtopo'
+    )
+
+    CopyRows_pd(in_table=fish_bdtopo_spjoin, out_table=fish_bdtopo_spjoin_tab,
+                fields_to_copy=['sta_id', 'ID', 'dist_to_bdtopo'])
+
+#Manual checking ASPE fish stations that are on a BD Topo or BD Carthage segment but not on a DDT segment by looking at all those
+#beyong 30 m from a DDT segment:
+
 
 #--------------------------------- Create hydrobiology station points  ---------------------------------------------------------
 if not arcpy.Exists(hydrobio_stations_pts):
@@ -547,6 +618,36 @@ if not arcpy.Exists(hydrobio_stations_pts):
                                     x_field='CoordXStationMesureEauxSurface', y_field='CoordYStationMesureEauxSurface',
                                     coordinate_system=sr_template)
     arcpy.Delete_management(hydrobio_stations_copy)
+
+if not arcpy.Exists(hydrobio_ddtnet_spjoin):
+    arcpy.SpatialJoin_analysis(
+        target_features=hydrobio_stations_pts,
+        join_features=ce_net,
+        out_feature_class=hydrobio_ddtnet_spjoin,
+        join_operation='JOIN_ONE_TO_ONE',
+        join_type='KEEP_ALL',
+        match_option='CLOSEST',
+        search_radius=1000,
+        distance_field_name='dist_to_ddtnet'
+    )
+
+    CopyRows_pd(in_table=hydrobio_ddtnet_spjoin, out_table=hydrobio_ddtnet_spjoin_tab,
+                fields_to_copy=['F_CdStationMesureEauxSurface', 'UID_CE', 'dist_to_ddtnet'])
+
+if not arcpy.Exists(hydrobio_bdtopo_spjoin):
+    arcpy.SpatialJoin_analysis(
+        target_features=hydrobio_stations_pts,
+        join_features=bdtopo2015_fr,
+        out_feature_class=hydrobio_bdtopo_spjoin,
+        join_operation='JOIN_ONE_TO_ONE',
+        join_type='KEEP_ALL',
+        match_option='CLOSEST',
+        search_radius=1000,
+        distance_field_name='dist_to_bdtopo'
+    )
+
+    CopyRows_pd(in_table=hydrobio_bdtopo_spjoin, out_table=hydrobio_bdtopo_spjoin_tab,
+                fields_to_copy=['F_CdStationMesureEauxSurface', 'ID', 'dist_to_bdtopo'])
 
 #--------------------------------- Format INSEE population data  -------------------------------------------------------
 if not arcpy.Exists(pop_ras_200m): #This may take 12-24h to process, on a good computer
