@@ -41,7 +41,7 @@ standard_download_zip(in_url=("https://wxs.ign.fr/x02uy2aiwjo9bm8ce5plwqmr/telec
 standard_download_zip(in_url=("https://services.sandre.eaufrance.fr/telechargement/geo/ETH/BDTopage/2023/"
                               "BassinVersantTopographique/BassinVersantTopographique_FXX-gpkg.zip"),
                       out_rootdir=out_dir,
-                      out_name="topage")
+                      out_name="bdtopage")
 
 #Download HydroBASINS
 standard_download_zip(in_url=("https://data.hydrosheds.org/file/hydrobasins/customized_with_lakes/"
