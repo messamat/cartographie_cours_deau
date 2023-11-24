@@ -1,5 +1,6 @@
 import arcpy.analysis
-from setup_classement import  *
+
+from setup_classement import *
 
 overwrite=False
 
@@ -8,15 +9,20 @@ anci_dir = os.path.join(datdir, "données_auxiliaires")#Ancillary data directory
 #Preprocessing geodatabase
 pregdb = os.path.join(resdir, "preprocessing_ancillary_data.gdb")
 
+#Scratch gdb
+tempgdb = os.path.join(resdir, "scratch.gdb")
+if not arcpy.Exists(tempgdb):
+    arcpy.CreateFileGDB_management(out_folder_path=os.path.split(tempgdb)[0],
+                                   out_name=os.path.split(tempgdb)[1])
 #------------------------------------------- INPUTS --------------------------------------------------------------------
 #Departments and communes - admin express
 admin_dir = os.path.join(anci_dir, "admin_express", "ADMIN-EXPRESS_3-2__SHP_WGS84G_FRA_2023-05-03",
-                    "1_DONNEES_LIVRAISON_2023-05-03", "ADE_3-2_SHP_WGS84G_FRA")
+                         "1_DONNEES_LIVRAISON_2023-05-03", "ADE_3-2_SHP_WGS84G_FRA")
 deps = os.path.join(admin_dir, "DEPARTEMENT.shp")
 coms = os.path.join(admin_dir, "COMMUNE.shp")
 
 #Catchments (cats) - Bassin versant topographique BD Topage
-cats_raw = os.path.join(anci_dir, "topage", "BassinVersantTopographique_FXX.gpkg", "main.BassinVersantTopographique_FXX")
+cats_raw = os.path.join(anci_dir, "bdtopage", "BassinVersantTopographique_FXX.gpkg", "main.BassinVersantTopographique_FXX")
 
 #Coordinate system template
 fr_sr = arcpy.Describe(cats_raw).SpatialReference
@@ -50,6 +56,11 @@ cats_hybasdeps_tab = os.path.join(resdir, 'BV_hybas0809_depsinters.csv')
 
 bcae_fr = os.path.join(pregdb, 'bcae_fr')
 bdtopo2015_fr = os.path.join(pregdb, 'bdtopo2015_fr')
+
+ddtnet_bdtopo_inters = os.path.join(pregdb, 'carto_loi_eau_bdtopo_inters')
+ddtnet_carthage_inters = os.path.join(pregdb, 'carto_loi_eau_carthage_inters')
+ddtnet_bdtopo_inters_tab = os.path.join(resdir, 'carto_loi_eau_bdtopo_inters_tab.csv')
+ddtnet_carthage_inters_tab = os.path.join(resdir, 'carto_loi_eau_carthage_inters_tab.csv')
 
 #------------- PREPARE UNITS OF ANALYSIS -------------------------------------------------------------------------------
 #Spatial join with HydroBASINS level 8-----------------------
@@ -116,6 +127,171 @@ if not arcpy.Exists(bcae_fr):
 if not arcpy.Exists(bdtopo2015_fr):
     arcpy.management.Merge(inputs=bdtopo2015_ce_filelist, output=bdtopo2015_fr)
 
+##------------- Identify identical geometries between the DDT network and BD Topo or Carthage --------------------------
+# in_target_ft=ce_net
+# in_join_ft=bdtopo2015_fr
+# out_ft=ddtnet_bdtopo_inters
+# tempgdb=tempgdb
+# in_join_ft_suffix='bdtopo'
+# in_join_ft_fieldstojoin='ID'
+# tolerance='1 Meters'
+def inters_linetoline(in_target_ft,
+                      in_join_ft,
+                      out_ft,
+                      tempgdb,
+                      in_join_ft_suffix,
+                      in_join_ft_fieldstojoin,
+                      in_target_ft_fieldstojoin,
+                      tolerance):
+
+    #Make sure in_join_ft_fieldstojoin is a list
+    if type(in_join_ft_fieldstojoin) == str:
+        in_join_ft_fieldstojoin = [in_join_ft_fieldstojoin]
+    if type(in_target_ft_fieldstojoin) == str:
+        in_target_ft_fieldstojoin = [in_target_ft_fieldstojoin]
+
+    #Get field type for join fields
+    in_join_ft_fdict = {f.name:f.type for f in arcpy.ListFields(in_join_ft)}
+    ftojoin_dict = {}
+    for ftojoin in in_join_ft_fieldstojoin:
+        if ftojoin in in_join_ft_fdict:
+            ftojoin_dict[ftojoin] = in_join_ft_fdict[ftojoin]
+
+    #Get field type for join fields
+    in_target_ft_fdict = {f.name:f.type for f in arcpy.ListFields(in_target_ft)}
+    target_ftojoin_dict = {}
+    for ftojoin in in_target_ft_fieldstojoin:
+        if ftojoin in target_ftojoin_dict:
+            target_ftojoin_dict[ftojoin] = target_ftojoin_dict[ftojoin]
+
+    #Project the dataset
+    in_join_ft_proj = os.path.join(tempgdb, 'join_ft_proj_{}'.format(in_join_ft_suffix))
+    if not arcpy.Exists(in_join_ft_proj):
+        if (arcpy.Describe(in_join_ft).SpatialReference != arcpy.Describe(in_target_ft).SpatialReference):
+            arcpy.Project_management(in_dataset=in_join_ft,
+                                     out_dataset=in_join_ft_proj,
+                                     out_coor_system=in_target_ft)
+        else:
+            arcpy.CopyFeatures_management(in_features=in_join_ft, out_feature_class=in_join_ft_proj)
+
+    #Add a specifically named length field
+    lenf = "length_{}".format(in_join_ft_suffix)
+    if lenf not in [f.name for f in arcpy.ListFields(in_join_ft_proj)]:
+        arcpy.AddGeometryAttributes_management(in_join_ft_proj, Geometry_Properties='LENGTH',
+                                               Length_Unit='METERS')
+        arcpy.AlterField_management(in_join_ft_proj, 'LENGTH', new_field_name=lenf, new_field_alias=lenf)
+
+    #Make a buffer of the desired tolerance around each line in the join feature class
+    in_join_ft_buf = os.path.join(tempgdb, 'join_ft_buf_{}'.format(in_join_ft_suffix))
+    if not arcpy.Exists(in_join_ft_buf):
+        arcpy.Buffer_analysis(in_features=in_join_ft_proj,
+                              out_feature_class=in_join_ft_buf,
+                              buffer_distance_or_field=tolerance,
+                              line_side='FULL',
+                              line_end_type='FLAT',
+                              dissolve_option='NONE'
+                              )
+
+        #Make sure to uniquely name the fields based on the join feature class to avoid duplicates with target feature class
+        for f in arcpy.ListFields(in_join_ft_buf):
+            if f.name not in [arcpy.Describe(in_join_ft_buf).OIDFieldName, 'Shape', 'Shape_Length', lenf]:
+                new_fname = "{0}_{1}".format(f.name, in_join_ft_suffix)
+                arcpy.AlterField_management(in_join_ft_buf, field=f.name,
+                                            new_field_name=new_fname,
+                                            new_field_alias=new_fname)
+                if f.name in ftojoin_dict:
+                    ftojoin_dict[new_fname] = ftojoin_dict.pop(f.name)
+
+    #Intersect the target feature class with the buffer of the join feature class
+    arcpy.Intersect_analysis(in_features=[ce_net, in_join_ft_buf],
+                             out_feature_class=out_ft,
+                             join_attributes='ONLY_FID',
+                             output_type='INPUT')
+
+    # ldict = {row[0]:row[1] for row in arcpy.da.SearchCursor(in_join_ft_proj, ['OID@', 'length_carthage'])}
+    # arcpy.AddField_management(out_ft, 'length_carthage', 'DOUBLE')
+    # with arcpy.da.UpdateCursor(out_ft, ['FID_join_ft_buf_carthage', 'length_carthage']) as cursor:
+    #     for row in cursor:
+    #         if row[0] in ldict:
+    #             row[1] = ldict[row[0]]
+    #             cursor.updateRow(row)
+
+    #Join the desired fields from the join feature class to the target feature class
+    def join_field_fromdict(in_tab, out_tab, field_dict):
+        ftojoin_valid = {}
+        for fname, ftype in field_dict.items():
+            if ftype=='String':
+                ftojoin_valid[fname]='TEXT'
+            if ftype=='Integer':
+                ftojoin_valid[fname] = 'LONG'
+            else:
+                ftojoin_valid[fname]=ftype.upper()
+        ftojoin_valid[lenf] = 'DOUBLE'
+
+        for fname, ftype in ftojoin_valid.items():
+            if fname not in [f.name for f in arcpy.ListFields(out_tab)]:
+                arcpy.AddField_management(out_tab, field_name=fname, field_type=ftype)
+
+        fcontent_dict = {row[0]: row[1:] for row in
+                         arcpy.da.SearchCursor(in_tab, ["OID@"] + list(ftojoin_valid.keys())
+                                               )}
+
+        with arcpy.da.UpdateCursor(out_tab, (["FID_{}".format(os.path.basename(in_tab))] +
+                                            list(ftojoin_valid.keys()))) as cursor:
+            for row in cursor:
+                if row[0] in fcontent_dict:
+                    row[1:] = list(fcontent_dict[row[0]])
+                    cursor.updateRow(row)
+
+        join_field_fromdict(in_tab = in_join_ft_buf,
+                            out_tab = out_ft,
+                            field_dict = ftojoin_dict
+                            )
+
+        join_field_fromdict(in_tab = in_target_ft,
+                            out_tab = out_ft,
+                            field_dict = target_ftojoin_dict
+                            )
+
+
+if not arcpy.Exists(ddtnet_bdtopo_inters):
+    inters_linetoline(
+        in_target_ft=ce_net,
+        in_join_ft=bdtopo2015_fr,
+        out_ft=ddtnet_bdtopo_inters,
+        tempgdb=tempgdb,
+        in_join_ft_suffix='bdtopo',
+        in_join_ft_fieldstojoin=['ID'],
+        in_target_ft_fieldstojoin=['UID_CE'],
+        tolerance='1 Meters'
+    )
+
+if not arcpy.Exists(ddtnet_bdtopo_inters_tab):
+    CopyRows_pd(in_table=ddtnet_bdtopo_inters,
+                out_table=ddtnet_bdtopo_inters_tab,
+                fields_to_copy={'UID_CE': 'UID_CE',
+                                'geom_Length': 'length_inters_bdtopo',
+                                'ID_bdtopo': 'ID_bdtopo',
+                                'length_bdtopo': 'length_bdtopo'})
+
+if not arcpy.Exists(ddtnet_carthage_inters):
+    inters_linetoline(in_target_ft=ce_net,
+                      in_join_ft=bdcarthage,
+                      out_ft=ddtnet_carthage_inters,
+                      tempgdb=tempgdb,
+                      in_join_ft_suffix='carthage',
+                      in_join_ft_fieldstojoin=['CODE_HYDRO', "ID_BDCARTH"],
+                      in_target_ft_fieldstojoin=['UID_CE'],
+                      tolerance='1 Meters')
+
+if not arcpy.Exists(ddtnet_bdtopo_inters_tab):
+    CopyRows_pd(in_table=ddtnet_carthage_inters,
+                out_table=ddtnet_carthage_inters_tab,
+                fields_to_copy={'UID_CE': 'UID_CE',
+                                'geom_Length': 'length_inters_carthage',
+                                'ID_BDCARTH_carthage': 'ID_carthage',
+                                'length_carthage': 'length_carthage'})
+
 #------------- INTERSECT WITH UNITS OF ANALYSIS ------------------------------------------------------------------------
 for net in [ce_net, bdtopo2015_fr, bcae_fr, bdcarthage, rht]:
     root_name = os.path.split(os.path.splitext(net)[0])[1]
@@ -127,3 +303,26 @@ for net in [ce_net, bdtopo2015_fr, bcae_fr, bdcarthage, rht]:
     if (not arcpy.Exists(out_tab)) or overwrite:
         print("Exporting {}...".format(out_tab))
         arcpy.CopyRows_management(out_net, out_tab)
+
+
+######Extra stuff
+    # # create the field mapping object
+    # fms_spjoin = arcpy.FieldMappings()
+    # # populate the field mapping object with the fields from both feature classes
+    # fms_spjoin.addTable(in_target_ft)
+    # fms_spjoin.addTable(in_join_ft_buf)
+    # # loop through the field names to sum
+    # for field in fms_spjoin.fields:
+    #     if field.name not in (
+    #             [f.name for f in arcpy.ListFields(in_target_ft)] + [lenf] +
+    #             ["{0}_{1}".format(ftojoin, in_join_ft_suffix) for ftojoin in in_join_ft_fieldstojoin]):
+    #         fms_spjoin.removeFieldMap(fms_spjoin.findFieldMapIndex(field.name))
+    #
+    # arcpy.SpatialJoin_analysis(target_features=in_target_ft,
+    #                            join_features=in_join_ft_buf,
+    #                            out_feature_class=out_ft,
+    #                            join_operation='JOIN_ONE_TO_ONE',
+    #                            join_type='KEEP_ALL',
+    #                            field_mapping=fms_spjoin,
+    #                            match_option='WITHIN'
+    #                            )
