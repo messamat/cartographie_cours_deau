@@ -193,6 +193,36 @@ def re_search_dict(in_dict, in_pattern, max_i=0):
         else:
             return (out_list[:max_i])
 
+#Export attribute table from an ESRI-compatible feature class to csv
+def CopyRows_pd(in_table, out_table, fields_to_copy):
+    #Make sure fields_to_copy is a list
+    if type(fields_to_copy) == str:
+        fields_to_copy = [fields_to_copy]
+
+    if type(fields_to_copy) == dict:
+        dict_for_renaming = fields_to_copy
+        fields_to_copy = list(fields_to_copy.keys())
+
+    fields_to_copy_valid = []
+    intable_flist = [f2.name for f2 in arcpy.ListFields(in_table)]
+    for f1 in fields_to_copy:
+        if f1 in intable_flist:
+            fields_to_copy_valid.append(f1)
+        else:
+            print("{0} field is not present in {1}".format(f1, in_table))
+
+    rows_to_copy_dict = defaultdict(float)
+    with arcpy.da.SearchCursor(in_table, ['OID@']+fields_to_copy_valid) as cursor: #Other fields are badly entered
+        for row in cursor:
+            rows_to_copy_dict[row[0]] = list(row[1:])
+
+    out_pd = pd.DataFrame.from_dict(data=rows_to_copy_dict, orient='index')
+    out_pd.columns = fields_to_copy_valid
+    if 'dict_for_renaming' in locals():
+        out_pd.rename(columns={k:v for k,v in dict_for_renaming.items() if k in fields_to_copy_valid},
+                      inplace=True)
+    out_pd.to_csv(out_table, index=False)
+
 def get_geoide_metadata_fromxmldict(in_xmldict):
     flatdict = flatten(in_xmldict['gmd:MD_Metadata']) #If use alternative xml source, need to edit to #flatten(in_xmldict['csw:GetRecordByIdResponse']['gmd:MD_Metadata'])
 
