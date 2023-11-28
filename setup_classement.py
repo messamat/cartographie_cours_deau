@@ -12,7 +12,7 @@ from osgeo import gdal, osr, ogr #
 import pandas as pd #Rpd.read_excel equires optional dependency openpyxl
 from pathlib import Path
 #import pip_system_certs.wrapt_requests
-import pygeoops
+#import pygeoops #problem with numpy
 import re
 import requests
 import shapefile

@@ -24,7 +24,8 @@ irrigation_departements = os.path.join(anci_dir, "agreste", "data_irrigation_SAU
 barriers = os.path.join(anci_dir, "amber", "AMBER_BARRIER_ATLAS_V1.csv")
 
 #Fish sampling stations - aspe
-fish_stations = os.path.join(anci_dir, "aspe", "raw_data", "raw_data", "csv", "station.csv")
+fish_stations = os.path.join(anci_dir, "aspe", "raw_data", "raw_data", "csv", "point_prelevement.csv")
+fish_proj_ref = os.path.join(anci_dir, 'aspe', 'raw_data', 'raw_data', 'csv', 'ref_type_projection.csv')
 
 #DEM - BDAlti
 bdalti_dir = os.path.join(anci_dir, "bdalti")
@@ -147,17 +148,23 @@ snelder_outnet_lambert = os.path.join(pregdb, 'rht_snelder_join_lambert')
 snelder_bvinters = os.path.join(tempgdb, 'snelder_ires_bvinters')
 snelder_bvinters_tab = os.path.join(resdir, 'snelder_ires_bvinters.csv')
 
-fish_stations_pts = os.path.join(pregdb, 'fish_stations_aspe')
-fish_ddtnet_spjoin = os.path.join(pregdb, 'fish_stations_aspe_carto_loi_eau_spjoin')
-fish_ddtnet_spjoin_tab = os.path.join(resdir, 'fish_stations_aspe_carto_loi_eau_spjoin.csv')
-fish_bdtopo_spjoin = os.path.join(pregdb, 'fish_stations_aspe_bdtopo_spjoin')
-fish_bdtopo_spjoin_tab = os.path.join(resdir, 'fish_stations_aspe_bdtopo_spjoin.csv')
+fish_stations_pts = os.path.join(pregdb, 'fish_pop_aspe')
+fish_ddtnet_spjoin = os.path.join(pregdb, 'fish_pop_aspe_carto_loi_eau_spjoin')
+fish_ddtnet_spjoin_tab = os.path.join(resdir, 'fish_pop_aspe_carto_loi_eau_spjoin.csv')
+fish_bdtopo_spjoin = os.path.join(pregdb, 'fish_pop_aspe_bdtopo_spjoin')
+fish_bdtopo_spjoin_tab = os.path.join(resdir, 'fish_pop_aspe_bdtopo_spjoin.csv')
+
+fish_stations_pts_bvinters = os.path.join(pregdb, "fish_pop_bvinters")
+fish_stations_pts_bvinters_tab = os.path.join(resdir, "fish_pop_bvinters.csv")
 
 hydrobio_stations_pts = os.path.join(pregdb, "hydrobio_stations_naiade")
 hydrobio_ddtnet_spjoin = os.path.join(pregdb, 'hydrobio_stations_naiade_carto_loi_eau_spjoin')
 hydrobio_ddtnet_spjoin_tab = os.path.join(resdir, 'hydrobio_stations_naiade_carto_loi_eau_spjoin.csv')
 hydrobio_bdtopo_spjoin = os.path.join(pregdb, 'hydrobio_stations_naiade_bdtopo_spjoin')
 hydrobio_bdtopo_spjoin_tab = os.path.join(resdir, 'hydrobio_stations_naiade_bdtopo_spjoin.csv')
+
+hydrobio_stations_pts_bvinters = os.path.join(pregdb, "hydrobio_stations_bvinters")
+hydrobio_stations_pts_bvinters_tab = os.path.join(resdir, "hydrobio_stations_bvinters.csv")
 
 buildings_filtered_fr = os.path.join(pregdb, "buildings_filtered_fr")
 buildings_popvariable =os.path.join(pregdb, "buildings_pop_nivNaturel_inters")
@@ -557,28 +564,63 @@ if not arcpy.Exists(onde_bdtopo_spjoin):
 
 #Manual checking ONDE sites that are on a BD Topo or BD carthage segment but not on a DDT segment by looking at all those
 #beyong 30 m from a DDT segment
-#CdSiteHydro: H5122351, M1060001, M1050001, V7300001, F4620002, V5220001,
-# P1130001,P3110001, P1560002, P3322511, P3800001, P3800002, P1560002,
+#CdSiteHydro: M1060001, M1050001, F4620002, P1130001, P3110001, P1560002, P3322511, P3800001, P3800002, P1560002
+#Manual checking ONDE sites whose closest site is a non-watercourse:
+#B5130001, Y4306511, V7300001, X3500011, X3500012, H0220001, K4320001
 
-
-# if not arcpy.Exists(onde_stations_pts_bvinters_tab):
-#     #Intersect with bv and export
-#     arcpy.analysis.Intersect([onde_stations_pts, cats_hybasdeps],
-#                              out_feature_class=onde_stations_pts_bvinters,
-#                              join_attributes="ALL")
-#     arcpy.CopyRows_management(in_rows=onde_stations_pts_bvinters,
-#                               out_table=onde_stations_pts_bvinters_tab)
-#     arcpy.Delete_management(onde_stations_pts_bvinters)
+if not arcpy.Exists(onde_stations_pts_bvinters_tab):
+    #Intersect with bv and export
+    arcpy.analysis.Intersect([onde_stations_pts, cats_hybasdeps],
+                             out_feature_class=onde_stations_pts_bvinters,
+                             join_attributes="ALL")
+    arcpy.CopyRows_management(in_rows=onde_stations_pts_bvinters,
+                              out_table=onde_stations_pts_bvinters_tab)
+    arcpy.Delete_management(onde_stations_pts_bvinters)
 
 #--------------------------------- Create fish station points  ---------------------------------------------------------
 if not arcpy.Exists(fish_stations_pts):
-    arcpy.management.XYTableToPoint(in_table=fish_stations, out_feature_class=fish_stations_pts,
-                                    x_field='sta_coordonnees_x', y_field='sta_coordonnees_y',
-                                    coordinate_system=sr_template)
+    fish_proj_ref_pd = pd.read_csv(fish_proj_ref, encoding='cp1252', sep=";")
+
+    fish_proj_list = []
+    for typ_id in fish_proj_ref_pd['typ_id']:
+        if typ_id != 1:
+            print(typ_id)
+            out_typ_tab = "{0}_projtype_{1}".format(fish_stations_pts, typ_id)
+            out_proj_tab = "{0}_projtype_{1}_reproj".format(fish_stations_pts, typ_id)
+
+            if not arcpy.Exists(out_typ_tab):
+                typ_espg = fish_proj_ref_pd.loc[fish_proj_ref_pd['typ_id']==typ_id, 'typ_code_epsg'].values[0]
+                arcpy.MakeTableView_management(fish_stations, 'fish_stations_lyr',
+                                               where_clause='pop_typ_id = {}'.format(typ_id))
+                scratch_tab = os.path.join(tempgdb, 'scratch_tab')
+                arcpy.CopyRows_management('fish_stations_lyr', scratch_tab)
+                if int(arcpy.GetCount_management(scratch_tab)[0]) > 0:
+                    arcpy.management.XYTableToPoint(
+                        in_table=scratch_tab,
+                        out_feature_class="{0}_projtype_{1}".format(fish_stations_pts, typ_id),
+                        x_field='pop_coordonnees_x', y_field='pop_coordonnees_y',
+                        coordinate_system=arcpy.SpatialReference(typ_espg))
+
+            if not arcpy.Exists(out_proj_tab) and arcpy.Exists(out_typ_tab):
+                arcpy.Project_management(out_typ_tab, out_proj_tab, out_coor_system=sr_template)
+
+            if arcpy.Exists(out_proj_tab):
+                fish_proj_list.append(out_proj_tab)
+
+    arcpy.Merge_management(fish_proj_list, output=fish_stations_pts)
+    arcpy.DeleteIdentical_management(fish_stations_pts, fields='Shape', xy_tolerance='1 meter')
+
+if not arcpy.Exists(fish_stations_pts_bvinters_tab):
+    #Intersect with bv and export
+    arcpy.analysis.Intersect([fish_stations_pts, cats_hybasdeps],
+                             out_feature_class=fish_stations_pts_bvinters,
+                             join_attributes="ALL")
+    arcpy.CopyRows_management(in_rows=fish_stations_pts_bvinters,
+                              out_table=fish_stations_pts_bvinters_tab)
 
 if not arcpy.Exists(fish_ddtnet_spjoin):
     arcpy.SpatialJoin_analysis(
-        target_features=fish_stations_pts,
+        target_features=fish_stations_pts_bvinters,
         join_features=ce_net,
         out_feature_class=fish_ddtnet_spjoin,
         join_operation='JOIN_ONE_TO_ONE',
@@ -589,35 +631,85 @@ if not arcpy.Exists(fish_ddtnet_spjoin):
     )
 
     CopyRows_pd(in_table=fish_ddtnet_spjoin, out_table=fish_ddtnet_spjoin_tab,
-                fields_to_copy=['sta_id', 'UID_CE', 'dist_to_ddtnet'])
+                fields_to_copy=['pop_id', 'UID_CE', 'dist_to_ddtnet'])
 
-if not arcpy.Exists(fish_bdtopo_spjoin):
-    arcpy.SpatialJoin_analysis(
-        target_features=fish_stations_pts,
-        join_features=bdtopo2015_fr,
-        out_feature_class=fish_bdtopo_spjoin,
-        join_operation='JOIN_ONE_TO_ONE',
-        join_type='KEEP_ALL',
-        match_option='CLOSEST',
-        search_radius=1000,
-        distance_field_name='dist_to_bdtopo'
-    )
-
-    CopyRows_pd(in_table=fish_bdtopo_spjoin, out_table=fish_bdtopo_spjoin_tab,
-                fields_to_copy=['sta_id', 'ID', 'dist_to_bdtopo'])
-
-#Manual checking ASPE fish stations that are on a BD Topo or BD Carthage segment but not on a DDT segment by looking at all those
-#beyong 30 m from a DDT segment:
-
-
+# if not arcpy.Exists(fish_bdtopo_spjoin):
+#     arcpy.SpatialJoin_analysis(
+#         target_features=fish_stations_pts,
+#         join_features=bdtopo2015_fr,
+#         out_feature_class=fish_bdtopo_spjoin,
+#         join_operation='JOIN_ONE_TO_ONE',
+#         join_type='KEEP_ALL',
+#         match_option='CLOSEST',
+#         search_radius=1000,
+#         distance_field_name='dist_to_bdtopo'
+#     )
+#
+#     CopyRows_pd(in_table=fish_bdtopo_spjoin, out_table=fish_bdtopo_spjoin_tab,
+#                 fields_to_copy=['sta_id', 'ID', 'dist_to_bdtopo'])
 #--------------------------------- Create hydrobiology station points  ---------------------------------------------------------
 if not arcpy.Exists(hydrobio_stations_pts):
     hydrobio_stations_copy = os.path.join(resdir, "hydrobio_stations_nariade_copy.csv")
-    pd.read_csv(hydrobio_stations, sep=";", encoding='cp1252').to_csv(hydrobio_stations_copy, encoding='utf-8', sep=";")
+    hydrobio_pd1 = pd.read_csv(hydrobio_stations, sep=",", encoding='cp1252',
+                               dtype= {
+                                   'CdStationMesureEauxSurface': str
+                                   ,'LbStationMesureEauxSurface': str
+                                   ,'DurStationMesureEauxSurface': str
+                                   ,'CoordXStationMesureEauxSurface': float
+                                   ,'CoordYStationMesureEauxSurface': float
+                                   ,'CdProjStationMesureEauxSurface': str
+                                   ,'LibelleProjection': str
+                                   ,'CodeCommune': str
+                                   ,'LbCommune': str
+                                   ,'CodeDepartement': str
+                                   ,'LbDepartement': str
+                                   ,'CodeRegion': str
+                                   ,'LbRegion': str
+                                   ,'CdMasseDEau': str
+                                   ,'CdEuMasseDEau': str
+                                   ,'NomMasseDEau': str
+                                   ,'CdEuSsBassinDCEAdmin': str
+                                   ,'NomSsBassinDCEAdmin': str
+                                   ,'CdBassinDCE': str
+                                   ,'CdEuBassinDCE': str
+                                   ,'NomEuBassinDCE': str
+                                   ,'CdTronconHydrographique': str
+                                   ,'CdCoursdEau': str
+                                   ,'NomCoursdEau': str
+                                   ,'CodeTypEthStationMesureEauxSurface': str
+                                   ,'LibelleTypEthStationMesureEauxSurface': str
+                                   ,'ComStationMesureEauxSurface': str
+                                   ,'DateCreationStationMesureEauxSurface': str
+                                   ,'DateArretActiviteStationMesureEauxSurface': str
+                                   ,'DateMAJInfosStationMesureEauxSurface': str
+                                   ,'FinaliteStationMesureEauxSurface': str
+                                   ,'LocPreciseStationMesureEauxSurface': str
+                                   ,'CodeNatureStationMesureEauxSurface': str
+                                   ,'LibelleNatureStationMesureEauxSurface': str
+                                   ,'AltitudePointCaracteritisque': str
+                                   ,'PkPointTronconEntiteHydroPrincipale': float
+                                   ,'PremierMoisAnneeEtiage': str
+                                   ,'SuperficieBassinVersantReel': float
+                                   ,'SuperficieBassinVersantTopo': float}
+                               )
+    hydrobio_pd1[~hydrobio_pd1['CodeDepartement'].isin(['2A', '2B', '972', '973, 974'])].to_csv(
+        hydrobio_stations_copy, encoding='utf-8', sep=";")
+
+    #Subset CodeDepartement: exclude 974, 973, 972, 2A, 2B
+    #Subset CodeTypEthStationMesureEauxSurface in 0 or 2 (1 is: "Station qualité située sur un plan d'eau")
     arcpy.management.XYTableToPoint(in_table=hydrobio_stations_copy, out_feature_class=hydrobio_stations_pts,
                                     x_field='CoordXStationMesureEauxSurface', y_field='CoordYStationMesureEauxSurface',
                                     coordinate_system=sr_template)
     arcpy.Delete_management(hydrobio_stations_copy)
+
+if not arcpy.Exists(hydrobio_stations_pts_bvinters_tab):
+    #Intersect with bv and export
+    arcpy.analysis.Intersect([hydrobio_stations_pts, cats_hybasdeps],
+                             out_feature_class=hydrobio_stations_pts_bvinters,
+                             join_attributes="ALL")
+    arcpy.CopyRows_management(in_rows=hydrobio_stations_pts_bvinters,
+                              out_table=hydrobio_stations_pts_bvinters_tab)
+    arcpy.Delete_management(hydrobio_stations_pts_bvinters)
 
 if not arcpy.Exists(hydrobio_ddtnet_spjoin):
     arcpy.SpatialJoin_analysis(
@@ -632,22 +724,25 @@ if not arcpy.Exists(hydrobio_ddtnet_spjoin):
     )
 
     CopyRows_pd(in_table=hydrobio_ddtnet_spjoin, out_table=hydrobio_ddtnet_spjoin_tab,
-                fields_to_copy=['F_CdStationMesureEauxSurface', 'UID_CE', 'dist_to_ddtnet'])
+                fields_to_copy=['CdStationMesureEauxSurface', 'UID_CE', 'dist_to_ddtnet'])
 
-if not arcpy.Exists(hydrobio_bdtopo_spjoin):
-    arcpy.SpatialJoin_analysis(
-        target_features=hydrobio_stations_pts,
-        join_features=bdtopo2015_fr,
-        out_feature_class=hydrobio_bdtopo_spjoin,
-        join_operation='JOIN_ONE_TO_ONE',
-        join_type='KEEP_ALL',
-        match_option='CLOSEST',
-        search_radius=1000,
-        distance_field_name='dist_to_bdtopo'
-    )
 
-    CopyRows_pd(in_table=hydrobio_bdtopo_spjoin, out_table=hydrobio_bdtopo_spjoin_tab,
-                fields_to_copy=['F_CdStationMesureEauxSurface', 'ID', 'dist_to_bdtopo'])
+#Manual checking Hydrobio fish stations that are on a BD Topo or BD Carthage segment but not on a DDT segment by looking at all those
+#beyong 30 m from a DDT segment:
+# 04164950, 04306005, 05068475, 02093200, 04362016, 04055825, 02118000,
+# 02120050, 05225085, 05225090, 02120400, 03149229, 01059000, 04401016,
+# 03269250, 03189652, 03149223, 04379004, 02042865, 02118748, 03207021,
+# 04371012, 03035734
+
+#Manual checking DCE hydrobio sites whose closest segment is a non-watercourse:
+# 01115300, 01119500, 02098396, 02098397
+# 02098398, 02114270, 02119000, 02120100,
+# 03006417, 03006590, 03011740, 03014470,
+# 03020188, 03085521, 04431025, 04441014,
+# 05111000, 05118795, 05234025, 06011900,
+# 06011965, 06039915, 06041810, 06048420,
+# 06580182, 06580359, 06590892, 06830132,
+
 
 #--------------------------------- Format INSEE population data  -------------------------------------------------------
 if not arcpy.Exists(pop_ras_200m): #This may take 12-24h to process, on a good computer
