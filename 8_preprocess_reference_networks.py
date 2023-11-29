@@ -1,5 +1,4 @@
 import arcpy.analysis
-
 from setup_classement import *
 
 overwrite=False
@@ -47,7 +46,9 @@ rht = os.path.join(anci_dir, "rht_2020", "rht_lbt93.shp")
 
 #DDT network
 outputs_gdb = os.path.join(resdir, 'analysis_outputs.gdb')
-ce_net = os.path.join(outputs_gdb, 'carto_loi_eau_fr')
+ddt_net = os.path.join(outputs_gdb, 'carto_loi_eau_fr')
+
+
 
 #------------- OUTPUTS ---------------------------------------------------------------------------------------------
 cats_hybasjoin = os.path.join(pregdb, 'BV_hybas0809_join') #Bassins versants topographiques (catchments) spatially jointed to HydroBASINS levels 8 and 9
@@ -135,7 +136,7 @@ if not arcpy.Exists(bdcarthage_nodupli):
     arcpy.management.DeleteIdentical(in_dataset=bdtopo2015_fr, fields='Shape', xy_tolerance='1 meter')
 
 ##------------- Identify identical geometries between the DDT network and BD Topo or Carthage --------------------------
-# in_target_ft=ce_net
+# in_target_ft=ddt_net
 # in_join_ft=bdtopo2015_fr
 # out_ft=ddtnet_bdtopo_inters
 # tempgdb=tempgdb
@@ -215,7 +216,7 @@ def inters_linetoline(in_target_ft,
     ftojoin_dict[lenf]='DOUBLE'
 
     #Intersect the target feature class with the buffer of the join feature class
-    arcpy.Intersect_analysis(in_features=[ce_net, in_join_ft_buf],
+    arcpy.Intersect_analysis(in_features=[ddt_net, in_join_ft_buf],
                              out_feature_class=out_ft,
                              join_attributes='ONLY_FID',
                              output_type='INPUT')
@@ -270,7 +271,7 @@ def inters_linetoline(in_target_ft,
 if not arcpy.Exists(ddtnet_bdtopo_inters):
     print("Intersecting bdtopo")
     inters_linetoline(
-        in_target_ft=ce_net,
+        in_target_ft=ddt_net,
         in_join_ft=bdtopo2015_fr,
         out_ft=ddtnet_bdtopo_inters,
         tempgdb=tempgdb,
@@ -289,7 +290,7 @@ if not arcpy.Exists(ddtnet_bdtopo_inters_tab):
 
 if not arcpy.Exists(ddtnet_carthage_inters):
     print("Intersecting carthage")
-    inters_linetoline(in_target_ft=ce_net,
+    inters_linetoline(in_target_ft=ddt_net,
                       in_join_ft=bdcarthage,
                       out_ft=ddtnet_carthage_inters,
                       tempgdb=tempgdb,
@@ -306,24 +307,9 @@ if not arcpy.Exists(ddtnet_carthage_inters_tab):
                                 'ID_BDCARTH_carthage': 'ID_carthage',
                                 'length_carthage': 'length_carthage'})
 
-#------------- IDENTIFY LONGITUDINAL DISCONNECTIONS IN DDT NETWORK  ----------------------------------------------------
-#Start trying with BD Alti
-#(Maybe smooth elevation)
-#Merge all lines between confluences
-#Extract elevation at very node along line
-#Run a regression across nodes
-#Establish direction of line based on regression
-
-#Then identify all lines with a dangle point that is also a start point
-#Check how many have a dangle point that is an end point - random sample
-
-#Check adjacent lines:
-#if end point is connected to an endpoint (or multiple endpoints), and start point is connected to a start point
-
-
 
 #------------- INTERSECT ALL NETWORKS WITH UNITS OF ANALYSIS -----------------------------------------------------------
-for net in [ce_net, bdtopo2015_fr, bcae_fr, bdcarthage, rht]:
+for net in [ddt_net, bdtopo2015_fr, bcae_fr, bdcarthage, rht]:
     root_name = os.path.split(os.path.splitext(net)[0])[1]
     out_net = os.path.join(pregdb, "{}_bvinters".format(root_name))
     out_tab = os.path.join(resdir, "{}_bvinters.csv".format(root_name))
