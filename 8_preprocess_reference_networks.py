@@ -56,6 +56,7 @@ cats_hybasdeps_tab = os.path.join(resdir, 'BV_hybas0809_depsinters.csv')
 
 bcae_fr = os.path.join(pregdb, 'bcae_fr')
 bdtopo2015_fr = os.path.join(pregdb, 'bdtopo2015_fr')
+bdcarthage_nodupli = os.path.join(pregdb, 'bdcarthage_nodupli')
 
 ddtnet_bdtopo_inters = os.path.join(pregdb, 'carto_loi_eau_bdtopo_inters')
 ddtnet_carthage_inters = os.path.join(pregdb, 'carto_loi_eau_carthage_inters')
@@ -126,6 +127,12 @@ if not arcpy.Exists(bcae_fr):
 #Merge BD Topo 2015
 if not arcpy.Exists(bdtopo2015_fr):
     arcpy.management.Merge(inputs=bdtopo2015_ce_filelist, output=bdtopo2015_fr)
+    arcpy.management.DeleteIdentical(in_dataset=bdtopo2015_fr, fields='Shape', xy_tolerance='1 meter')
+
+#Remove duplicates in Carthage as well
+if not arcpy.Exists(bdcarthage_nodupli):
+    arcpy.CopyFeatures_management(bdcarthage, bdcarthage_nodupli)
+    arcpy.management.DeleteIdentical(in_dataset=bdtopo2015_fr, fields='Shape', xy_tolerance='1 meter')
 
 ##------------- Identify identical geometries between the DDT network and BD Topo or Carthage --------------------------
 # in_target_ft=ce_net
@@ -157,12 +164,12 @@ def inters_linetoline(in_target_ft,
         if ftojoin in in_join_ft_fdict:
             ftojoin_dict[ftojoin] = in_join_ft_fdict[ftojoin]
 
-    #Get field type for join fields
+    #Get field type for target fields
     in_target_ft_fdict = {f.name:f.type for f in arcpy.ListFields(in_target_ft)}
     target_ftojoin_dict = {}
     for ftojoin in in_target_ft_fieldstojoin:
-        if ftojoin in target_ftojoin_dict:
-            target_ftojoin_dict[ftojoin] = target_ftojoin_dict[ftojoin]
+        if ftojoin in in_target_ft_fdict :
+            target_ftojoin_dict[ftojoin] = in_target_ft_fdict[ftojoin]
 
     #Project the dataset
     in_join_ft_proj = os.path.join(tempgdb, 'join_ft_proj_{}'.format(in_join_ft_suffix))
@@ -192,15 +199,20 @@ def inters_linetoline(in_target_ft,
                               dissolve_option='NONE'
                               )
 
-        #Make sure to uniquely name the fields based on the join feature class to avoid duplicates with target feature class
-        for f in arcpy.ListFields(in_join_ft_buf):
-            if f.name not in [arcpy.Describe(in_join_ft_buf).OIDFieldName, 'Shape', 'Shape_Length', lenf]:
-                new_fname = "{0}_{1}".format(f.name, in_join_ft_suffix)
-                arcpy.AlterField_management(in_join_ft_buf, field=f.name,
-                                            new_field_name=new_fname,
-                                            new_field_alias=new_fname)
-                if f.name in ftojoin_dict:
-                    ftojoin_dict[new_fname] = ftojoin_dict.pop(f.name)
+    #Make sure to uniquely name the fields based on the join feature class to avoid duplicates with target feature class
+    for f in arcpy.ListFields(in_join_ft_buf):
+        if ((f.name not in [arcpy.Describe(in_join_ft_buf).OIDFieldName, 'Shape', 'Shape_Area', 'Shape_Length', lenf]) and
+            (not re.findall("_{}$".format(in_join_ft_suffix), f.name))):
+            new_fname = "{0}_{1}".format(f.name, in_join_ft_suffix)
+            print('Editing {0} to {1}...'.format(f.name, new_fname))
+            arcpy.AlterField_management(in_join_ft_buf, field=f.name,
+                                        new_field_name=new_fname,
+                                        new_field_alias=new_fname)
+    for fname in in_join_ft_fieldstojoin:
+        if fname in ftojoin_dict:
+            new_fname = "{0}_{1}".format(fname, in_join_ft_suffix)
+            ftojoin_dict[new_fname] = ftojoin_dict.pop(fname)
+    ftojoin_dict[lenf]='DOUBLE'
 
     #Intersect the target feature class with the buffer of the join feature class
     arcpy.Intersect_analysis(in_features=[ce_net, in_join_ft_buf],
@@ -226,7 +238,9 @@ def inters_linetoline(in_target_ft,
                 ftojoin_valid[fname] = 'LONG'
             else:
                 ftojoin_valid[fname]=ftype.upper()
-        ftojoin_valid[lenf] = 'DOUBLE'
+
+        if lenf in field_dict:
+            ftojoin_valid[lenf] = 'DOUBLE'
 
         for fname, ftype in ftojoin_valid.items():
             if fname not in [f.name for f in arcpy.ListFields(out_tab)]:
@@ -243,18 +257,18 @@ def inters_linetoline(in_target_ft,
                     row[1:] = list(fcontent_dict[row[0]])
                     cursor.updateRow(row)
 
-        join_field_fromdict(in_tab = in_join_ft_buf,
-                            out_tab = out_ft,
-                            field_dict = ftojoin_dict
-                            )
+    join_field_fromdict(in_tab = in_join_ft_buf,
+                        out_tab = out_ft,
+                        field_dict = ftojoin_dict
+                        )
 
-        join_field_fromdict(in_tab = in_target_ft,
-                            out_tab = out_ft,
-                            field_dict = target_ftojoin_dict
-                            )
-
+    join_field_fromdict(in_tab = in_target_ft,
+                        out_tab = out_ft,
+                        field_dict = target_ftojoin_dict
+                        )
 
 if not arcpy.Exists(ddtnet_bdtopo_inters):
+    print("Intersecting bdtopo")
     inters_linetoline(
         in_target_ft=ce_net,
         in_join_ft=bdtopo2015_fr,
@@ -263,9 +277,8 @@ if not arcpy.Exists(ddtnet_bdtopo_inters):
         in_join_ft_suffix='bdtopo',
         in_join_ft_fieldstojoin=['ID'],
         in_target_ft_fieldstojoin=['UID_CE'],
-        tolerance='1 Meters'
+        tolerance='5 Meters'
     )
-
 if not arcpy.Exists(ddtnet_bdtopo_inters_tab):
     CopyRows_pd(in_table=ddtnet_bdtopo_inters,
                 out_table=ddtnet_bdtopo_inters_tab,
@@ -275,6 +288,7 @@ if not arcpy.Exists(ddtnet_bdtopo_inters_tab):
                                 'length_bdtopo': 'length_bdtopo'})
 
 if not arcpy.Exists(ddtnet_carthage_inters):
+    print("Intersecting carthage")
     inters_linetoline(in_target_ft=ce_net,
                       in_join_ft=bdcarthage,
                       out_ft=ddtnet_carthage_inters,
@@ -282,9 +296,9 @@ if not arcpy.Exists(ddtnet_carthage_inters):
                       in_join_ft_suffix='carthage',
                       in_join_ft_fieldstojoin=['CODE_HYDRO', "ID_BDCARTH"],
                       in_target_ft_fieldstojoin=['UID_CE'],
-                      tolerance='1 Meters')
-
-if not arcpy.Exists(ddtnet_bdtopo_inters_tab):
+                      tolerance='5 Meters'
+                      )
+if not arcpy.Exists(ddtnet_carthage_inters_tab):
     CopyRows_pd(in_table=ddtnet_carthage_inters,
                 out_table=ddtnet_carthage_inters_tab,
                 fields_to_copy={'UID_CE': 'UID_CE',
@@ -292,7 +306,23 @@ if not arcpy.Exists(ddtnet_bdtopo_inters_tab):
                                 'ID_BDCARTH_carthage': 'ID_carthage',
                                 'length_carthage': 'length_carthage'})
 
-#------------- INTERSECT WITH UNITS OF ANALYSIS ------------------------------------------------------------------------
+#------------- IDENTIFY LONGITUDINAL DISCONNECTIONS IN DDT NETWORK  ----------------------------------------------------
+#Start trying with BD Alti
+#(Maybe smooth elevation)
+#Merge all lines between confluences
+#Extract elevation at very node along line
+#Run a regression across nodes
+#Establish direction of line based on regression
+
+#Then identify all lines with a dangle point that is also a start point
+#Check how many have a dangle point that is an end point - random sample
+
+#Check adjacent lines:
+#if end point is connected to an endpoint (or multiple endpoints), and start point is connected to a start point
+
+
+
+#------------- INTERSECT ALL NETWORKS WITH UNITS OF ANALYSIS -----------------------------------------------------------
 for net in [ce_net, bdtopo2015_fr, bcae_fr, bdcarthage, rht]:
     root_name = os.path.split(os.path.splitext(net)[0])[1]
     out_net = os.path.join(pregdb, "{}_bvinters".format(root_name))
