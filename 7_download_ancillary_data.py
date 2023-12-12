@@ -26,12 +26,18 @@ def standard_download_zip(in_url, out_rootdir, out_name):
     else:
         print("{} already exists. Skipping...".format(unzipped_path))
 
+################  Download large analysis units  #######################################################################
 #Download administrative boundaries
 standard_download_zip(in_url=("https://wxs.ign.fr/x02uy2aiwjo9bm8ce5plwqmr/telechargement/prepackage/"
                               "ADMINEXPRESS_SHP_TERRITOIRES_PACK_2023-10-16$ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16/f"
                               "ile/ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16.7z"),
                       out_rootdir=out_dir,
                       out_name="admin_express")
+
+#Download large hydrographic units
+standard_download_zip(in_url=("https://services.sandre.eaufrance.fr/telechargement/geo/ETH/BDTopage/2023/BassinHydrographique/BassinHydrographique_FXX-shp.zip"),
+                      out_rootdir=out_dir,
+                      out_name="bdtopage")
 
 ################  Download hydrographic basis for classification  #########################################################
 # According to Note 2015 "Appui Onema et IGN à l’inventaire des cours d’eau police de l’eau –Volet information géographique"
