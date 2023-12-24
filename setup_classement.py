@@ -57,10 +57,13 @@ def getwkspfiles(dir, repattern=None):
     return ([os.path.join(dir, f) for f in filenames_list])
     arcpy.ClearEnvironment('workspace')
 
-def getfilelist(dir, repattern=None, gdbf=True, nongdbf=True, fullpath=False):
+def getfilelist(dir, repattern=None, nongdbf=True, gdbf=False, fullpath=False):
     """Function to iteratively go through all subdirectories inside 'dir' path
     and retrieve path for each file that matches "repattern"
     gdbf and nongdbf allows the user to choose whether to consider ArcGIS workspaces (GDBs) or not or exclusively"""
+
+    if isinstance(dir, Path):
+        dir = str(dir)
 
     try:
         if arcpy.Describe(dir).dataType == 'Workspace':

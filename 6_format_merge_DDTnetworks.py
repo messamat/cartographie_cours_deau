@@ -1,6 +1,7 @@
 import fiona
 import shapely
 from setup_classement import * #Get directory structure and packages
+import pygeoops
 
 overwrite = False #Whether to overwrite outputs or skip them if done
 
@@ -232,7 +233,7 @@ pd.concat(colNAs_formatted_dict.values(), axis=0).to_csv(out_colNAs_tab)
 
 #Format Aisne -------------------------
 print('Formatting data for the Aisne department')
-aisne_editfile = getfilelist(Path(out_dir, 'D2_Aisne'), '.*_edit[.]gpkg')[0]
+aisne_editfile = getfilelist(os.path.join(out_dir, 'D2_Aisne'), '.*_edit[.]gpkg', gdbf=False)[0]
 aisne_gpd = gpd.read_file(aisne_editfile)
 
 #Merge fields indicating status
@@ -273,7 +274,7 @@ sel_cols = ["type_stand","type_aux","regime","regime2", "nat_id", "nat_id2", "or
             ]
 if not Path(out_net_path).exists() or overwrite:
     print('Merging all layers')
-    net_editlist = getfilelist(out_dir, '.*_edit[.]gpkg$')
+    net_editlist = getfilelist(out_dir, '.*_edit[.]gpkg$', gdbf=False)
     net_gpdlist = []
     for net_path in net_editlist:
         print(net_path)

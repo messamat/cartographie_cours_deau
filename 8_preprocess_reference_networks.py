@@ -48,8 +48,6 @@ rht = os.path.join(anci_dir, "rht_2020", "rht_lbt93.shp")
 outputs_gdb = os.path.join(resdir, 'analysis_outputs.gdb')
 ddt_net = os.path.join(outputs_gdb, 'carto_loi_eau_fr')
 
-
-
 #------------- OUTPUTS ---------------------------------------------------------------------------------------------
 cats_hybasjoin = os.path.join(pregdb, 'BV_hybas0809_join') #Bassins versants topographiques (catchments) spatially jointed to HydroBASINS levels 8 and 9
 cats_hybasdeps = os.path.join(pregdb, 'BV_hybas0809_depsinters') #BV joined to HydroBASINS and intersected with Departements
