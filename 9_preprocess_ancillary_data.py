@@ -113,10 +113,11 @@ bdhaies_fr = os.path.join(pregdb, "bdhaies_fr")
 bdhaies_bvinters = os.path.join(pregdb, "bdhaies_bvinters")
 bdhaies_bvinters_tab = os.path.join(resdir, "bdhaies_bvinters.csv")
 
-oso_veg = os.path.join(lcav_dir, 'oso_veg')
-oso_imp = os.path.join(lcav_dir, 'oso_imp')
-oso_agr = os.path.join(lcav_dir, 'oso_agr')
-oso_scr = os.path.join(lcav_dir, 'oso_scr')
+oso_veg = os.path.join(lcav_dir, 'oso_veg.tif')
+oso_for = os.path.join(lcav_dir, 'oso_for.tif')
+oso_imp = os.path.join(lcav_dir, 'oso_imp.tif')
+oso_agr = os.path.join(lcav_dir, 'oso_agr.tif')
+oso_scr = os.path.join(lcav_dir, 'oso_scr.tif')
 
 gai_yr = os.path.join(pregdb, "ai_v3_yrav")
 gai_summer = os.path.join(pregdb, "ai_v3_summerav")
@@ -303,6 +304,12 @@ if not arcpy.Exists(oso_veg):
         in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}.tif'.format(str(cl).zfill(2)))
                                  for cl in [16,17,18,19]],
         statistics_type='SUM').save(oso_veg)
+
+if not arcpy.Exists(oso_for):
+    CellStatistics(
+        in_rasters_or_constants=[os.path.join(lcav_dir, 'oso_cl{}.tif'.format(str(cl).zfill(2)))
+                                 for cl in [16, 17]],
+        statistics_type='SUM').save(oso_for)
 
 if not arcpy.Exists(oso_imp):
     CellStatistics(

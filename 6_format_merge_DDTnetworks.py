@@ -10,7 +10,8 @@ resdir = Path(resdir)
 
 #Read compilation of metadata
 geometadata_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
-geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_réseau_SIG')
+geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_réseau_SIG',
+                               na_values='NA', keep_default_na=False)
 
 #Create output directory
 out_dir = Path(resdir, 'reseaux_departementaux_copies')
@@ -185,6 +186,7 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
                             sep=';')
                         if 'NULL' in cats_orig:
                             cats_orig.append(str(np.nan))
+                            cats_orig.append(str(None))
 
                         if not pd.isnull(in_row_net['type_stand']):
                             if isinstance(in_row_net['type_stand'], float):
@@ -202,6 +204,7 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
         colNAs_formatted['nrows'] = len(net)
         colNAs_formatted['dep_code'] = row_metadata['Numéro']
 
+        #in_row_net = net.iloc[100,:]
         net.loc[:, 'type_stand'] = net.apply(recat_gpdcol,
                                              in_row_metadata=row_metadata,
                                              in_dict_recat=dict_recat_type_ecoul,
@@ -222,7 +225,7 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
         print('No metadata associated with this layer. Skipping.')
 
 colNAs_formatted_dict = {}
-#in_net_path = net_copylist[6]
+# in_net_path = net_copylist[43]
 for net_path in net_copylist:
     #print(net_path)
     colNAs_formatted_dict[net_path] = format_net(in_net_path=net_path,

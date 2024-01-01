@@ -10,7 +10,8 @@ if not geoide_dir.exists():
 
 #Read compilation of data sources by French department
 datasources_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
-datasources_pd = pd.read_excel(datasources_path, sheet_name = 'Ressources')
+datasources_pd = pd.read_excel(datasources_path, sheet_name = 'Ressources',
+                               na_values = 'NA', keep_default_na = False)
 
 #Format as long table
 re_geoide = re.compile('Catalogue interministériel de données géographiques')

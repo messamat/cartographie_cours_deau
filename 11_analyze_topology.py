@@ -1,5 +1,4 @@
-import os.path
-
+import os
 import arcpy.analysis
 import collections
 
@@ -229,6 +228,16 @@ def iterate_strahler(in_lines, out_gdb, prefix, suffix, in_loop_ids_tab_path, st
                         row[1] = strahler_ini + 1
                     cursor.updateRow(row)
 
+#Deal with simple loops (two lines sharing start and end points) ---------------------------
+#Make a subset of undefined lines
+#Unsplit lines
+#Identify loops
+#Find lines with an assigned strahler order that connect with two undefined on one end - dictionary key-value
+#Reverse dictionary to identify loops with only one undefined line connected to it
+#Exclude those with more than one undefined line connected to it
+#Exclude lines in those loops that have a dangle point -> assign higher strahler order of line in the loop without dangle and line connected to that loop
+#Else (those with one undefined line connected to it and no dangle points): assign higher connected strahler order
+#Assign that strahler order to undefined connected line
 def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
     ddt_net_dissolved = os.path.join(out_gdb, '{0}_noartif_dissolved_{1}'.format(prefix, suffix))
     ddt_net_conflupts = os.path.join(out_gdb, '{0}_noartif_conflupts_{1}'.format(prefix, suffix))
@@ -346,8 +355,8 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
         loop_ids = {}
         for k_1,v_1 in bothendpts_selfinters_dict.items():
             dupli_value = [k_2 for k_2, v_2 in collections.Counter(v_1).items() if v_2 == 2]
-            if len(dupli_value) > 1: #One occurrence of double-loop, ignore for now
-                print(dupli_value)
+            #if len(dupli_value) > 1: #One occurrence of double-loop, ignore for now
+            #   print(dupli_value)
             if len(dupli_value) == 1 and (dupli_value[0] not in loop_ids): #(dupli_value not in loop_ids) ensures that loops are included only once rather than once for each participating line
                 loop_ids[k_1] = dupli_value[0]
 
@@ -397,7 +406,7 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
         #Iterate multiple times until there are not such cases because there are sometimes multiple segment pieces one after the other
         arcpy.CopyFeatures_management(ddt_net_conflusplit_directed_ini, ddt_net_conflusplit_directed)
 
-        for s_o in range(1,8):
+        for s_o in range(1,4):
             assign_strahler_splitline(in_lines=ddt_net_conflusplit_directed,
                                       out_gdb=out_gdb,
                                       prefix=prefix,
@@ -418,17 +427,6 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
                              suffix = suffix,
                              in_loop_ids_tab_path = loop_ids_tab_path,
                              strahler_ini=s_o)
-
-        #Deal with simple loops---------------------------
-        #Make a subset of undefined lines
-        #Unsplit lines
-        #Identify loops
-        #Find lines with an assigned strahler order that connect with two undefined on one end - dictionary key-value
-        #Reverse dictionary to identify loops with only one undefined line connected to it
-        #Exclude those with more than one undefined line connected to it
-        #Exclude lines in those loops that have a dangle point -> assign higher strahler order of line in the loop without dangle and line connected to that loop
-        #Else (those with one undefined line connected to it and no dangle points): assign higher connected strahler order
-        #Assign that strahler order to undefined connected line
 
         #Re-run full loop from strahler order two to max.
 
@@ -482,7 +480,7 @@ if not arcpy.Exists(ddt_net_noartif_bh):
                                join_type='KEEP_ALL',
                                match_option='LARGEST_OVERLAP')
 
-#Merge all lines between confluences and identify first-order streams
+#Merge all lines between confluences and assign strahler order
 bh_numset = {row[0] for row in arcpy.da.SearchCursor(ddt_net_noartif_bh, 'CdBH')}
 for bh_num in bh_numset:
     if bh_num is not None:
@@ -496,7 +494,7 @@ for bh_num in bh_numset:
                           suffix=bh_num,
                           out_gdb=pregdb,
                           out_net=ddt_net_noartif_wstrahler)
-#47867
+
 ################################ DO THE SAME FOR BDTOPO ################################################################
 # Remove all truly artificial watercourses that may disrupt topology
 if not arcpy.Exists(bdtopo_noartif):
@@ -531,21 +529,48 @@ if not arcpy.Exists(bdtopo_noartif_bh):
                                join_type='KEEP_ALL',
                                match_option='LARGEST_OVERLAP')
 
-# Merge all lines between confluences
+# Merge all lines between confluences and assign strahler order
 bh_numset = {row[0] for row in arcpy.da.SearchCursor(bdtopo_noartif_bh, 'CdBH')}
 for bh_num in bh_numset:
     if bh_num is not None:
         print(bh_num)
         arcpy.MakeFeatureLayer_management(bdtopo_noartif_bh, 'bdtopo_noartif_sub',
                                           where_clause="CdBH='{}'".format(bh_num))
-        bdtopo_noartif_wstrahler1 = os.path.join(pregdb, 'bdtopo_noartif_strahler1_{}'.format(bh_num))
+        bdtopo_noartif_wstrahler = os.path.join(pregdb, 'bdtopo_noartif_strahler_{}'.format(bh_num))
         identify_strahler(in_net='bdtopo_noartif_sub',
                            in_dem=bdalti_mosaic,
                            suffix=bh_num,
                            out_gdb=pregdb,
-                           out_net=bdtopo_noartif_wstrahler1,
+                           out_net=bdtopo_noartif_wstrahler,
                            prefix='bdtopo')
 #Check how many have a dangle point that is an end point - random sample
 
-#Check adjacent lines:
-#if end point is connected to an endpoint (or multiple endpoints), and start point is connected to a start point
+
+################################ Merge and export #####################################################################
+ddt_net_wstrahler = os.path.join(pregdb, 'carto_loi_eau_noartif_strahler_fr')
+ddt_net_wstrahler_tab = os.path.join(resdir, 'carto_loi_eau_noartif_strahler_fr.csv')
+ddt_net_wstrahler_list = getfilelist(dir=pregdb, repattern='carto_loi_eau_noartif_strahler_.*',
+                                    nongdbf=False, gdbf=True, fullpath=True)
+if not arcpy.Exists(ddt_net_wstrahler):
+    print('Merging all regions of ddt net with Strahler order')
+    arcpy.Merge_management(ddt_net_wstrahler_list, ddt_net_wstrahler)
+    ftodelete_list = [f.name for f in arcpy.ListFields(ddt_net_wstrahler) if f.name not in
+                      [arcpy.Describe(ddt_net_wstrahler).OIDFieldName, 'Shape', 'ID', 'strahler', 'Shape_Length']]
+    arcpy.DeleteField_management(ddt_net_wstrahler, drop_field=ftodelete_list)
+if not arcpy.Exists(ddt_net_wstrahler_tab):
+    print('Exporting attribute table to csv')
+    arcpy.CopyRows_management(ddt_net_wstrahler, ddt_net_wstrahler_tab)
+
+bdtopo_wstrahler = os.path.join(pregdb, 'bdtopo_noartif_strahler_fr')
+bdtopo_wstrahler_tab = os.path.join(resdir, 'bdtopo_noartif_strahler_fr.csv')
+bdtopo_wstrahler_list = getfilelist(dir=pregdb, repattern='bdtopo_noartif_strahler_.*',
+                                    nongdbf=False, gdbf=True, fullpath=True)
+if not arcpy.Exists(bdtopo_wstrahler):
+    print('Merging all regions of bd topo with Strahler order')
+    arcpy.Merge_management(bdtopo_wstrahler_list, bdtopo_wstrahler)
+    ftodelete_list = [f.name for f in arcpy.ListFields(bdtopo_wstrahler) if f.name not in
+                      [arcpy.Describe(bdtopo_wstrahler).OIDFieldName, 'Shape', 'ID', 'strahler', 'Shape_Length']]
+    arcpy.DeleteField_management(bdtopo_wstrahler, drop_field=ftodelete_list)
+if not arcpy.Exists(bdtopo_wstrahler_tab):
+    print('Exporting attribute table to csv')
+    arcpy.CopyRows_management(bdtopo_wstrahler, bdtopo_wstrahler_tab)
