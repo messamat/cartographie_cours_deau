@@ -121,10 +121,8 @@ def remove_contained_lines(in_net, temp_gdb, out_gdb, idfn='UID_CE',
 
     return ([ids_to_delete, ids_not_to_delete])
 
-
 def get_lr_coef(df, x, y):
     return (LinearRegression().fit(df[[x]], df[[y]]).coef_[0][0])
-
 
 def assign_strahler_splitline(in_lines, out_gdb, prefix, suffix, in_strahler):
     for vertex_direction in ['START', 'END']:
@@ -187,60 +185,6 @@ def assign_strahler_splitline(in_lines, out_gdb, prefix, suffix, in_strahler):
                         row[1] = in_strahler
                         cursor.updateRow(row)
 
-
-# in_lines = ddt_net_conflusplit_directed
-# in_loop_ids_tab_path = loop_ids_tab_path
-# strahler_ini = 1
-def iterate_strahler(in_lines, out_gdb, prefix, suffix, in_loop_ids_tab_path, strahler_ini):
-    print('Assigning strahler order {}'.format(strahler_ini + 1))
-    for vertex_direction in ['START', 'END']:
-        in_lines_oneendpts = os.path.join(
-            out_gdb, '{0}_noartif_conflusplit_directed_{1}_{2}'.format(prefix, vertex_direction, suffix))
-        arcpy.FeatureVerticesToPoints_management(in_features=in_lines,
-                                                 out_feature_class=in_lines_oneendpts,
-                                                 point_location=vertex_direction)
-
-        in_lines_bothendpts = os.path.join(
-            out_gdb, '{0}_noartif_conflusplit_directed_bothendpts_{1}'.format(prefix, suffix))
-        arcpy.FeatureVerticesToPoints_management(in_features=in_lines,
-                                                 out_feature_class=in_lines_bothendpts,
-                                                 point_location='BOTH_ENDS')
-
-        in_lines_bothendpts_selfinters = os.path.join(
-            out_gdb, '{0}_noartif_conflusplit_directed_bothendpts_selfinters_{1}'.format(prefix, suffix))
-        arcpy.Intersect_analysis(in_features=[in_lines_oneendpts,
-                                              in_lines_bothendpts],
-                                 out_feature_class=in_lines_bothendpts_selfinters,
-                                 join_attributes='ALL')
-
-        # Unique IDs of loops
-        loop_ids_list = set().union(*
-                                    [{v_2 for v_2 in v_1.split('_')} for v_1 in
-                                     pd.read_csv(in_loop_ids_tab_path)['OBJECTID']]
-                                    )
-        # Get the set of lines intersecting each line with strahler_ini, excluding loops
-        split_order1_pts_selfinters = defaultdict(set)
-        with (arcpy.da.SearchCursor(in_lines_bothendpts_selfinters,
-                                    ['ORIG_FID', 'ORIG_FID_1', 'strahler', 'strahler_1']) as cursor):
-            for row in cursor:
-                if ((row[0] != row[1]) and (row[1] not in split_order1_pts_selfinters[row[0]])
-                    and (row[2] is None) and (row[3] == strahler_ini)) and (not row[1] in loop_ids_list):
-                    # If intersecting point is from different line, and other line is not already in dict
-                    # and strahler order is undefined for this line and strahler_ini for this other line
-                    # and this other line is not a flagged loop line
-                    split_order1_pts_selfinters[row[0]].add(row[1])
-
-        # If intersecting at least two lines with strahler_ini, assign strahler_ini + 1
-        with arcpy.da.UpdateCursor(in_lines, ['OID@', 'strahler']) as cursor:
-            for row in cursor:
-                if row[0] in split_order1_pts_selfinters:
-                    # if len(split_order1_pts_selfinters[row[0]]) == 1:
-                    #     row[1] = strahler_ini
-                    if len(split_order1_pts_selfinters[row[0]]) > 1:
-                        row[1] = strahler_ini + 1
-                    cursor.updateRow(row)
-
-
 # Deal with simple loops (two lines sharing start and end points) ---------------------------
 def inner_identify_loops(in_net, ref_fn, out_gdb, suffix):
     net_conflusplit_unsplit_bothendpts = os.path.join(
@@ -289,7 +233,6 @@ def inner_identify_loops(in_net, ref_fn, out_gdb, suffix):
         rename({'index': ref_fn, 0: '{}_1'.format(ref_fn)}, axis='columns')
 
     return (loop_ids_pd)
-
 
 # Identify loops" subset network to remove lines with strahler order, identify simple loops, unsplit lines
 # re-identify loops, output panda data frame
@@ -395,18 +338,16 @@ def assign_strahler_toloops(in_net, in_loop_ids_df, idfield, out_gdb, prefix, su
     # If two lines of that order, assign that order +1 to all lines in loop and the connected undefined line
     in_net_bothends = os.path.join(out_gdb, '{0}_noartif_conflusplit_bothendpts_{1}'.format(prefix, suffix))
 
-    if not arcpy.Exists(in_net_bothends):
-        arcpy.FeatureVerticesToPoints_management(in_features=in_net,
-                                                 out_feature_class=in_net_bothends,
-                                                 point_location='BOTH_ENDS')
+    arcpy.FeatureVerticesToPoints_management(in_features=in_net,
+                                             out_feature_class=in_net_bothends,
+                                             point_location='BOTH_ENDS')
 
     net_conflusplit_unsplit_segs_bothendpts_inters = os.path.join(
         out_gdb, '{0}_noartif_conflusplit_segs_bothendpts_inters_{1}'.format(prefix, suffix))
-    if not arcpy.Exists(net_conflusplit_unsplit_segs_bothendpts_inters):
-        arcpy.Intersect_analysis(in_features=[in_net,
-                                              in_net_bothends],
-                                 out_feature_class=net_conflusplit_unsplit_segs_bothendpts_inters,
-                                 join_attributes='ALL')
+    arcpy.Intersect_analysis(in_features=[in_net,
+                                          in_net_bothends],
+                             out_feature_class=net_conflusplit_unsplit_segs_bothendpts_inters,
+                             join_attributes='ALL')
 
     # Create a nested dictionary for which each outer key is a unique loop_id
     # for each loop_id, the outer value is another dictionary which contains the list of connected lines IDs (inner values) by strahler order (inner keys)
@@ -464,6 +405,54 @@ def assign_strahler_toloops(in_net, in_loop_ids_df, idfield, out_gdb, prefix, su
 
     return(new_strahler_dict)
 
+# in_lines = ddt_net_conflusplit_directed
+# in_loop_ids_tab_path = loop_ids_tab_path
+# strahler_ini = 1
+def iterate_strahler(in_lines, out_gdb, idfield, in_loop_ids_df, prefix, suffix, strahler_ini):
+    print('Assigning strahler order {}'.format(strahler_ini + 1))
+    for vertex_direction in ['START', 'END']:
+        in_lines_oneendpts = os.path.join(
+            out_gdb, '{0}_noartif_conflusplit_directed_{1}_{2}'.format(prefix, vertex_direction, suffix))
+        arcpy.FeatureVerticesToPoints_management(in_features=in_lines,
+                                                 out_feature_class=in_lines_oneendpts,
+                                                 point_location=vertex_direction)
+
+        in_lines_bothendpts = os.path.join(
+            out_gdb, '{0}_noartif_conflusplit_directed_bothendpts_{1}'.format(prefix, suffix))
+        arcpy.FeatureVerticesToPoints_management(in_features=in_lines,
+                                                 out_feature_class=in_lines_bothendpts,
+                                                 point_location='BOTH_ENDS')
+
+        in_lines_bothendpts_selfinters = os.path.join(
+            out_gdb, '{0}_noartif_conflusplit_directed_bothendpts_selfinters_{1}'.format(prefix, suffix))
+        arcpy.Intersect_analysis(in_features=[in_lines_oneendpts,
+                                              in_lines_bothendpts],
+                                 out_feature_class=in_lines_bothendpts_selfinters,
+                                 join_attributes='ALL')
+
+        # Unique IDs of loops
+        loop_ids_list = in_loop_ids_df[idfield].values
+
+        # Get the set of lines intersecting each line with strahler_ini, excluding loops
+        split_order_pts_selfinters = defaultdict(set)
+        with (arcpy.da.SearchCursor(in_lines_bothendpts_selfinters,
+                                    [idfield, '{}_1'.format(idfield), 'strahler', 'strahler_1']) as cursor):
+            for row in cursor:
+                if (((row[0] != row[1]) and (row[1] not in split_order_pts_selfinters[row[0]])
+                    and (row[2] is None) and (row[3] == strahler_ini))
+                        and (not row[0] in loop_ids_list)): #(not row[1] in loop_ids_list) not needed because dealing with loops include downstream segments
+                    # If intersecting point is from different line, and other line is not already in dict
+                    # and strahler order is undefined for this line and strahler_ini for this other line
+                    # and this other line is not a flagged loop line
+                    split_order_pts_selfinters[row[0]].add(row[1])
+
+        # If intersecting at least two lines with strahler_ini, assign strahler_ini + 1
+        with arcpy.da.UpdateCursor(in_lines, [idfield, 'strahler']) as cursor:
+            for row in cursor:
+                if row[0] in split_order_pts_selfinters:
+                    if len(split_order_pts_selfinters[row[0]]) > 1:
+                        row[1] = strahler_ini + 1
+                    cursor.updateRow(row)
 
 # bh_num = '01'
 # arcpy.MakeFeatureLayer_management(ddt_net_noartif_bh, 'ddt_net_noartif_sub',
@@ -572,11 +561,20 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
                                           where_clause="elv_coef > 0.1")
         arcpy.edit.FlipLine(in_features='segs_to_flip_lyr')
 
-        print("Assign first order to lines with dangle point and start point coinciding")
+        print("Identify lines with dangle points")
         if not arcpy.Exists(net_conflusplit_dangle):
             arcpy.FeatureVerticesToPoints_management(in_features=net_conflusplit_directed_ini,
                                                      out_feature_class=net_conflusplit_dangle,
                                                      point_location='DANGLE')
+
+        stub_list = [row[0] for row in
+                     arcpy.da.SearchCursor(net_conflusplit_dangle, ['ORIG_FID', 'DANGLE_LEN'])
+                     if row[1] < 10]
+        print("Delete {} stubs: lines with dangle points under 5-m".format(len(stub_list)))
+        with arcpy.da.UpdateCursor(net_conflusplit_directed_ini, ['OID@']) as cursor:
+            for row in cursor:
+                if row[0] in stub_list:
+                    cursor.deleteRow()
 
         if not arcpy.Exists(net_conflusplit_start):
             arcpy.FeatureVerticesToPoints_management(in_features=net_conflusplit_directed_ini,
@@ -588,6 +586,8 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
                                      out_feature_class=net_conflusplit_danglestart_inters,
                                      join_attributes='ALL')
 
+
+        print("Assign first order to lines with dangle point and start point coinciding")
         first_order_list = [row[0] for row in arcpy.da.SearchCursor(net_conflusplit_danglestart_inters, ['ORIG_FID'])]
         if 'strahler' not in [f.name for f in arcpy.ListFields(net_conflusplit_directed_ini)]:
             arcpy.AddField_management(net_conflusplit_directed_ini, 'strahler', 'SHORT')
@@ -596,9 +596,6 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
                 if row[0] in first_order_list:
                     row[1] = 1
                     cursor.updateRow(row)
-
-        arcpy.Delete_management(net_conflusplit_dangle)
-        arcpy.Delete_management(net_conflusplit_start)
 
         # Some segments had not been well dissolved, so only part of the reach is order 1 and the rest is undefined
         # So: if a segment intersects only one strahler order 1, and does so from a start or end point, make it strahler order 1
@@ -615,8 +612,9 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
                 expression="!{}!".format(arcpy.Describe(net_conflusplit_directed).OIDFieldName)
             )
 
-        for s_o in range(1, 4):
+        for s_o in range(1, 9):
             #loop_ids_temptab = os.path.join(resdir, '{0}_loop_ids_temptab_{1}.csv'.format(prefix, suffix))
+            print('Expanding stream order {} downstream...'.format(s_o))
             assigned_loops = {9999:999}
             while len(assigned_loops.keys()) > 0:
                 #Expand strahler down until next confluence
@@ -637,40 +635,36 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix):
 
                 #If there are loops
                 if len(loop_ids_df) > 0:
-                    #############################################INVESTIGATE WHY TEMPID 46706 and the associated loop was not assigned a strahler order
                     assigned_loops = assign_strahler_toloops(in_net=net_conflusplit_directed,
                                                              in_loop_ids_df=loop_ids_df,
                                                              idfield=tempIDfn,
                                                              out_gdb=out_gdb,
                                                              prefix=prefix,
                                                              suffix=suffix)
+                    print('Assigned Strahlher order to {0} segments associateds'
+                          ' with simple loops for stream order {1}'.format(
+                        len(assigned_loops.keys()),s_o))
                 else:
                     assigned_loops = {}
 
-            # # For some reason, sometimes does not always process everything
-            # assign_strahler_splitline(in_lines=net_conflusplit_directed,
-            #                           out_gdb=out_gdb,
-            #                           prefix=prefix,
-            #                           suffix=suffix,
-            #                           in_strahler=s_o)
-            # loop_ids_tab_path = os.path.join(resdir, '{0}_loop_ids_tab_{1}.csv'.format(prefix, suffix))
-            # identify_loops(in_net=net_conflusplit,
-            #                out_looptab=loop_ids_tab_path,
-            #                out_gdb=out_gdb,
-            #                prefix=prefix,
-            #                suffix=suffix,
-            #                overwrite=False)
+            #Identify loops with undefined strahler order
+            loop_ids_df = identify_loops(in_net=net_conflusplit_directed,
+                                         idfield=tempIDfn,
+                                         out_gdb=out_gdb,
+                                         subset_net=True,
+                                         prefix=prefix,
+                                         suffix=suffix)
+            loop_ids_df = loop_ids_df.astype(float).astype(int)
 
             iterate_strahler(in_lines=net_conflusplit_directed,
                              out_gdb=out_gdb,
+                             in_loop_ids_df=loop_ids_df,
+                             idfield=tempIDfn,
                              prefix=prefix,
                              suffix=suffix,
-                             in_loop_ids_tab_path=loop_ids_tab_path,
                              strahler_ini=s_o)
 
-        # Re-run full loop from strahler order two to max.
 
-        # Extend order to undefined one after loop
 
     # Remove lines with dangle points under 10 m
     # arcpy.MakeFeatureLayer_management(in_net, 'ddt_confusplit_sublyr',
