@@ -774,7 +774,6 @@ def identify_strahler(in_net, in_dem, out_gdb, out_net, prefix, suffix, temp_gdb
                                   suffix=suffix,
                                   so_min=1,
                                   so_max=5)
-    print(time.time()-start)
 
     # Remove lines with dangle points under 10 m
     # arcpy.MakeFeatureLayer_management(in_net, 'ddt_confusplit_sublyr',
@@ -936,7 +935,7 @@ if not arcpy.Exists(bdtopo_noartif_bh):
 
 # Merge all lines between confluences and assign strahler order
 bh_numset = {row[0] for row in arcpy.da.SearchCursor(bdtopo_noartif_bh, 'CdBH')}
-for bh_num in ['04', '05', '06']:#bh_numset:
+for bh_num in ['02', '03', '04']:#bh_numset:
     if bh_num is not None:
         print("PROCESSING HYDROGAPHIC BASIN {}".format(bh_num))
         temp_gdb = os.path.join(resdir, "scratch_{}.gdb".format(bh_num))
@@ -950,14 +949,15 @@ for bh_num in ['04', '05', '06']:#bh_numset:
         arcpy.CopyFeatures_management('bdtopo_noartif_sub', bdtopo_noartif_sub)
         arcpy.Delete_management('bdtopo_noartif_sub')
 
+        bdtopo_wstrahler = os.path.join(pregdb, 'bdtopo_noartif_strahler_{}'.format(bh_num))
         enhance_network_topology(in_net=bdtopo_noartif_sub,
                                  idfn='ID',
                                  in_dem=bdalti_mosaic,
                                  temp_gdb=temp_gdb,
-                                 out_gdb=pregdb,
-                                 prefix='bdtopo_noartif_sub',
+                                 out_net=bdtopo_wstrahler,
+                                 prefix='bdtopo_noartif',
                                  suffix=bh_num,
-                                 overwrite=False)
+                                 overwrite=True)
 
 
 # Check how many have a dangle point that is an end point - random sample
