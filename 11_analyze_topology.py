@@ -125,7 +125,7 @@ def get_lr_coef(df, x, y):
     return (LinearRegression().fit(df[[x]], df[[y]]).coef_[0][0])
 
 def assign_strahler_splitline(in_net, out_gdb, prefix, suffix, in_strahler):
-    print("-------- Assign same Strahler order to lines connected by one end "
+    print("-------- Assigning same Strahler order to lines connected by one end "
           "exclusively to another line of order {}".format(in_strahler))
 
     for vertex_direction in ['START', 'END']:
@@ -150,8 +150,8 @@ def assign_strahler_splitline(in_net, out_gdb, prefix, suffix, in_strahler):
                                      out_feature_class=in_lines_bothendpts_selfinters,
                                      join_attributes='ALL')
 
-            split_order1_pts_selfinters_1 = defaultdict(list)
-            split_order1_pts_selfinters_undefined = defaultdict(list)
+            split_order1_pts_selfinters_1 = defaultdict(set)
+            split_order1_pts_selfinters_undefined = defaultdict(set)
             with (arcpy.da.SearchCursor(in_lines_bothendpts_selfinters,
                                         ['ORIG_FID', 'ORIG_FID_1', 'strahler', 'strahler_1']) as cursor):
                 for row in cursor:
@@ -159,17 +159,17 @@ def assign_strahler_splitline(in_net, out_gdb, prefix, suffix, in_strahler):
                             and (row[2] is None) and (row[3] == in_strahler)):
                         # If intersecting point is from different line, and other line is not already in dict
                         # and strahler order is undefined for this line and one for this other line
-                        split_order1_pts_selfinters_1[row[0]].append(row[1])
+                        split_order1_pts_selfinters_1[row[0]].add(row[1])
                     if ((row[0] != row[1]) and (row[1] not in split_order1_pts_selfinters_1[row[0]])
                             and (row[2] is None) and (row[3] is None)):
-                        split_order1_pts_selfinters_undefined[row[0]].append(row[1])
+                        split_order1_pts_selfinters_undefined[row[0]].add(row[1])
 
             # Identify those "other 1st order lines" which intersect with only one undefined line
             # (to avoid first order streams intersecting already-second order streams)
-            split_order1_pts_selfinters_rev = defaultdict(list)
+            split_order1_pts_selfinters_rev = defaultdict(set)
             for k, v in split_order1_pts_selfinters_1.items():
                 for i in v:
-                    split_order1_pts_selfinters_rev[i].append(k)
+                    split_order1_pts_selfinters_rev[i].add(k)
             endpts_selfinters_unique_match_ids = {k for k, v in split_order1_pts_selfinters_rev.items() if len(v) == 1}
 
             qualifying_endpts_selfinters_ids = {k for k, v in split_order1_pts_selfinters_1.items()
@@ -252,9 +252,11 @@ def identify_loops(in_net, idfield, out_gdb, subset_net, prefix, suffix, verbose
     #oidfn = arcpy.Describe(in_net).OIDFieldName
     if not 'CONCATENATE_{}'.format(idfield) in [f.name for f in arcpy.ListFields(in_net)]:
         arcpy.AddField_management(in_net, 'CONCATENATE_{}'.format(idfield), 'LONG')
-        arcpy.CalculateField_management(in_table=in_net,
-                                        field='CONCATENATE_{}'.format(idfield),
-                                        expression="!{}!".format(idfield))
+        with arcpy.da.UpdateCursor(in_net, ['CONCATENATE_{}'.format(idfield), idfield]) as cursor:
+            for row in cursor:
+                row[0] = row[1]
+                cursor.updateRow(row)
+
     loop_ids_beforeunsplit = inner_identify_loops(in_net=in_net,
                                                   ref_fn='CONCATENATE_{}'.format(idfield),
                                                   out_gdb=out_gdb,
@@ -320,7 +322,7 @@ def identify_loops(in_net, idfield, out_gdb, subset_net, prefix, suffix, verbose
     loop_ids_df_format = loop_ids_df.loc[~loop_ids_df['value'].isnull(), ['loop_id', 'value']]
     loop_ids_df_format.rename(mapper={'value': idfield}, axis=1, inplace=True)
 
-    #Remove loops with identical constitutive lines (due to self looping unsplit lines having been added)
+    #Remove loops with identical constitutive lines (due to self-looping unsplit lines having been added)
     loop_ids_nodupli = set()
     loop_values = set()
     for k,v in loop_ids_df_format.groupby('loop_id')[idfield].apply(frozenset).to_dict().items():
@@ -364,22 +366,25 @@ def assign_strahler_toloops(in_net, in_loop_ids_df, idfield, out_gdb, prefix, su
                     sel_loopid = in_loop_ids_df.loc[in_loop_ids_df[idfield] == row[0], 'loop_id'].values[0]
                     loop_connections_dict[sel_loopid][row[2]].add(row[1])
 
-    #
     loop_connections_df = pd.DataFrame.from_dict(loop_connections_dict, orient='index'). \
         reset_index(names='loop_id')
+
     # Identify loops that intersect with a single undefined line or only defined lines
     loop_connections_1NA = loop_connections_df[loop_connections_df[np.NaN].str.len() == 1]. \
         melt(id_vars='loop_id')
     loop_connections_1NA['variable'] = loop_connections_1NA['variable'].astype('Int64')
+
     # Identify the maximum strahler order of the connected lines with a defined order
     max_connected_strahler = loop_connections_1NA.loc[~loop_connections_1NA['value'].isnull()]. \
         groupby('loop_id'). \
         max('variable')
+
     # Join
     loop_connections_1NA_maxstrahler = pd.merge(
         loop_connections_1NA,
         max_connected_strahler[~max_connected_strahler['variable'].isna()],
         how='inner', on=['loop_id', 'variable'])
+
     # Count and assign new order
     loop_connections_1NA_maxstrahler['new_strahler'] = loop_connections_1NA_maxstrahler['variable']
     loop_connections_1NA_maxstrahler.loc[
@@ -711,7 +716,7 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix, overwrit
                                                       prefix=prefix,
                                                       suffix=suffix)
 
-        print("-------- Assigned Strahler order 1 to {} stubs connected to lines with defined order".format(
+        print("-------- Assigning Strahler order 1 to {} stubs connected to lines with defined order".format(
             len(stubs_so1_assigned)))
         for so in reversed(range(8)):
             assign_strahler_splitline(in_net=net_conflusplit_directed,
@@ -733,7 +738,7 @@ def identify_strahler(in_net, in_dem, suffix, out_gdb, out_net, prefix, overwrit
     # arcpy.MakeFeatureLayer_management(in_net, 'ddt_confusplit_sublyr',
     #                                   where_clause="orig_layer='D73_Savoie'")
     if (not arcpy.Exists(out_net)) or overwrite:
-        print("---- Re-assign Strahler order attribute to original network...")
+        print("---- Re-assigning Strahler order attribute to original network...")
         arcpy.SpatialJoin_analysis(target_features=in_net,
                                    join_features=net_conflusplit_directed,
                                    out_feature_class=out_net,
