@@ -59,7 +59,7 @@ bdtopo_wstrahler_tab = os.path.join(resdir, 'bdtopo_noartif_strahler_fr.csv')
 
 # ------------- TRY TO ENHANCE DDT AND BDTOPO NETWORKS WITH FLOW DIRECTION --------------------------------------------------------
 # Remove lines that are fully contained within other ones without deleting both lines if perfect overlap between two lines
-def remove_contained_lines(in_net, idfn, temp_gdb, precision_digits=2, delete_lenfield=True):
+def remove_contained_lines(in_net, idfn, temp_gdb, precision_digits=2, delete_lenfield=True, check_type=True):
     selfinters_lines = os.path.join(temp_gdb, 'selfinters_lines')
 
     # Self intersect lines
@@ -83,11 +83,11 @@ def remove_contained_lines(in_net, idfn, temp_gdb, precision_digits=2, delete_le
     ids_not_to_delete = set()
     ids_to_delete = set()
     # Let's say that idfn is the id of the source line, and idfn_1 the id of the target line
-    with (arcpy.da.UpdateCursor(selfinters_lines, [idfn, '{}_1'.format(idfn),
-                                                  'ORIG_LENGTH', 'LENGTH_GEO',
-                                                  'ORIG_LENGTH_1',
-                                                  'type_stand', 'type_stand_1',
-                                                  ]) as cursor):
+    cursor_cols = [idfn, '{}_1'.format(idfn),'ORIG_LENGTH', 'LENGTH_GEO', 'ORIG_LENGTH_1']
+    if check_type:
+        cursor_cols.extend(['type_stand', 'type_stand_1'])
+
+    with (arcpy.da.UpdateCursor(selfinters_lines, cursor_cols) as cursor):
         for row in cursor:
             # Only analyze intersections between two different lines
             if row[0] != row[1]:
@@ -99,17 +99,21 @@ def remove_contained_lines(in_net, idfn, temp_gdb, precision_digits=2, delete_le
                     ids_not_to_delete.add(row[1])
                 # if the length of the intersection of the source line with the target line is the same length as the original source line
                 elif (round(row[2], precision_digits) == round(row[3], precision_digits)):
-                    # if the target line is also fully overlapping, and it does not have watercourses status while the source line does
-                    # delete the target line
-                    if (round(row[4], precision_digits) == round(row[3], precision_digits)) \
-                            and (row[5] in ["Cours d'eau", "Non cours d'eau"]) \
-                            and (row[6] not in ["Cours d'eau", "Non cours d'eau"]):
-                        ids_to_delete.add(row[1])
-                        ids_not_to_delete.add(row[0])
-                    #Otherwise, delete the source line
-                    else:
+                    #If not checking whether there is a difference in line status, delete source line
+                    if not check_type:
                         ids_to_delete.add(row[0])
                         ids_not_to_delete.add(row[1])
+                    else:
+                        # if the target line is also fully overlapping, and it does not have watercourses status while the source line does
+                        #  delete the target line
+                        if (round(row[4], precision_digits) == round(row[3], precision_digits)) \
+                            and (row[5] in ["Cours d'eau", "Non cours d'eau"]) \
+                            and (row[6] not in ["Cours d'eau", "Non cours d'eau"]):
+                            ids_to_delete.add(row[1])
+                            ids_not_to_delete.add(row[0])
+                        else: #otherwise, delete the source line
+                            ids_to_delete.add(row[0])
+                            ids_not_to_delete.add(row[1])
 
     with arcpy.da.UpdateCursor(in_net, [idfn]) as cursor:
         for row in cursor:
@@ -131,45 +135,45 @@ def assign_strahler_splitline(in_net, out_gdb, prefix, suffix, in_strahler):
     for vertex_direction in ['START', 'END']:
         qualifying_endpts_selfinters_ids = {1}
         while len(qualifying_endpts_selfinters_ids) > 0:
-            in_lines_oneendpts = os.path.join(
+            in_net_oneendpts = os.path.join(
                 out_gdb, '{0}_noartif_conflusplit_directed_{1}_{2}'.format(prefix, vertex_direction, suffix))
             arcpy.FeatureVerticesToPoints_management(in_features=in_net,
-                                                     out_feature_class=in_lines_oneendpts,
+                                                     out_feature_class=in_net_oneendpts,
                                                      point_location=vertex_direction)
 
-            in_lines_bothendpts = os.path.join(
+            in_net_bothendpts = os.path.join(
                 out_gdb, '{0}_noartif_conflusplit_directed_bothendpts_{1}'.format(prefix, suffix))
             arcpy.FeatureVerticesToPoints_management(in_features=in_net,
-                                                     out_feature_class=in_lines_bothendpts,
+                                                     out_feature_class=in_net_bothendpts,
                                                      point_location='BOTH_ENDS')
 
-            in_lines_bothendpts_selfinters = os.path.join(
+            in_net_bothendpts_selfinters = os.path.join(
                 out_gdb, '{0}_noartif_conflusplit_directed_bothendpts_selfinters_{1}'.format(prefix, suffix))
-            arcpy.Intersect_analysis(in_features=[in_lines_oneendpts,
-                                                  in_lines_bothendpts],
-                                     out_feature_class=in_lines_bothendpts_selfinters,
+            arcpy.Intersect_analysis(in_features=[in_net_oneendpts,
+                                                  in_net_bothendpts],
+                                     out_feature_class=in_net_bothendpts_selfinters,
                                      join_attributes='ALL')
 
-            split_order1_pts_selfinters_1 = defaultdict(set)
+            split_order1_pts_selfinters_1 = defaultdict(list)
             split_order1_pts_selfinters_undefined = defaultdict(set)
-            with (arcpy.da.SearchCursor(in_lines_bothendpts_selfinters,
+            with (arcpy.da.SearchCursor(in_net_bothendpts_selfinters,
                                         ['ORIG_FID', 'ORIG_FID_1', 'strahler', 'strahler_1']) as cursor):
                 for row in cursor:
                     if ((row[0] != row[1]) and (row[1] not in split_order1_pts_selfinters_1[row[0]])
                             and (row[2] is None) and (row[3] == in_strahler)):
                         # If intersecting point is from different line, and other line is not already in dict
                         # and strahler order is undefined for this line and one for this other line
-                        split_order1_pts_selfinters_1[row[0]].add(row[1])
+                        split_order1_pts_selfinters_1[row[0]].append(row[1])
                     if ((row[0] != row[1]) and (row[1] not in split_order1_pts_selfinters_1[row[0]])
                             and (row[2] is None) and (row[3] is None)):
                         split_order1_pts_selfinters_undefined[row[0]].add(row[1])
 
             # Identify those "other 1st order lines" which intersect with only one undefined line
             # (to avoid first order streams intersecting already-second order streams)
-            split_order1_pts_selfinters_rev = defaultdict(set)
+            split_order1_pts_selfinters_rev = defaultdict(list)
             for k, v in split_order1_pts_selfinters_1.items():
                 for i in v:
-                    split_order1_pts_selfinters_rev[i].add(k)
+                    split_order1_pts_selfinters_rev[i].append(k)
             endpts_selfinters_unique_match_ids = {k for k, v in split_order1_pts_selfinters_rev.items() if len(v) == 1}
 
             qualifying_endpts_selfinters_ids = {k for k, v in split_order1_pts_selfinters_1.items()
@@ -317,7 +321,8 @@ def identify_loops(in_net, idfield, out_gdb, subset_net, prefix, suffix, verbose
         # Make sure that the unsplit IDs are string with None passed through
         (loop_ids['CONCATENATE_{}_1'.format(idfield)].str.split('_', expand=True))],
         axis=1). \
-        reset_index(names='loop_id'). \
+        reset_index(). \
+        rename(columns={'index':'loop_id'}). \
         melt(id_vars='loop_id')
 
     loop_ids_df_format = loop_ids_df.loc[~loop_ids_df['value'].isnull(), ['loop_id', 'value']]
@@ -368,7 +373,8 @@ def assign_strahler_toloops(in_net, idfield, in_loop_ids_df, out_gdb, prefix, su
                     loop_connections_dict[sel_loopid][row[2]].add(row[1])
 
     loop_connections_df = pd.DataFrame.from_dict(loop_connections_dict, orient='index'). \
-        reset_index(names='loop_id')
+        reset_index(). \
+        rename(columns={'index': 'loop_id'})
 
     # Identify loops that intersect with a single undefined line or only defined lines
     loop_connections_1NA = loop_connections_df[loop_connections_df[np.NaN].str.len() == 1]. \
@@ -417,23 +423,23 @@ def assign_strahler_toloops(in_net, idfield, in_loop_ids_df, out_gdb, prefix, su
 def iterate_strahler(in_net, idfield, in_loop_ids_df, out_gdb, prefix, suffix, strahler_ini):
     print('-------- Assigning strahler order {} at confluences'.format(strahler_ini + 1))
     for vertex_direction in ['START', 'END']:
-        in_lines_oneendpts = os.path.join(
+        in_net_oneendpts = os.path.join(
             out_gdb, '{0}_noartif_conflusplit_directed_{1}_{2}'.format(prefix, vertex_direction, suffix))
         arcpy.FeatureVerticesToPoints_management(in_features=in_net,
-                                                 out_feature_class=in_lines_oneendpts,
+                                                 out_feature_class=in_net_oneendpts,
                                                  point_location=vertex_direction)
 
-        in_lines_bothendpts = os.path.join(
+        in_net_bothendpts = os.path.join(
             out_gdb, '{0}_noartif_conflusplit_directed_bothendpts_{1}'.format(prefix, suffix))
         arcpy.FeatureVerticesToPoints_management(in_features=in_net,
-                                                 out_feature_class=in_lines_bothendpts,
+                                                 out_feature_class=in_net_bothendpts,
                                                  point_location='BOTH_ENDS')
 
-        in_lines_bothendpts_selfinters = os.path.join(
+        in_net_bothendpts_selfinters = os.path.join(
             out_gdb, '{0}_noartif_conflusplit_directed_bothendpts_selfinters_{1}'.format(prefix, suffix))
-        arcpy.Intersect_analysis(in_features=[in_lines_oneendpts,
-                                              in_lines_bothendpts],
-                                 out_feature_class=in_lines_bothendpts_selfinters,
+        arcpy.Intersect_analysis(in_features=[in_net_oneendpts,
+                                              in_net_bothendpts],
+                                 out_feature_class=in_net_bothendpts_selfinters,
                                  join_attributes='ALL')
 
         # Unique IDs of loops
@@ -441,7 +447,7 @@ def iterate_strahler(in_net, idfield, in_loop_ids_df, out_gdb, prefix, suffix, s
 
         # Get the set of lines intersecting each line with strahler_ini, excluding loops
         split_order_pts_selfinters = defaultdict(set)
-        with (arcpy.da.SearchCursor(in_lines_bothendpts_selfinters,
+        with (arcpy.da.SearchCursor(in_net_bothendpts_selfinters,
                                     [idfield, '{}_1'.format(idfield), 'strahler', 'strahler_1']) as cursor):
             for row in cursor:
                 if (((row[0] != row[1]) and (row[1] not in split_order_pts_selfinters[row[0]])
@@ -508,7 +514,7 @@ def run_strahler_routing_loop(in_net, idfield, out_gdb, prefix, suffix, so_min, 
                                      suffix=suffix)
         loop_ids_df = loop_ids_df.astype(float).astype(int)
 
-        iterate_strahler(in_lines=in_net,
+        iterate_strahler(in_net=in_net,
                          out_gdb=out_gdb,
                          in_loop_ids_df=loop_ids_df,
                          idfield=idfield,
@@ -554,6 +560,7 @@ def assign_strahler_to_stubs(in_net, in_stublist, idfield, out_gdb, prefix, suff
     return stubs_so1_list
 
 def identify_strahler(in_net, in_dem, out_gdb, out_net, prefix, suffix, overwrite=True):
+    tempIDfn = 'tempID'
     net_noduplisubsegs = os.path.join(out_gdb, '{0}_noartif_noduplisubsegs_{1}'.format(prefix, suffix))
     net_dissolved = os.path.join(out_gdb, '{0}_noartif_dissolved_{1}'.format(prefix, suffix))
     net_conflupts = os.path.join(out_gdb, '{0}_noartif_conflupts_{1}'.format(prefix, suffix))
@@ -575,8 +582,9 @@ def identify_strahler(in_net, in_dem, out_gdb, out_net, prefix, suffix, overwrit
                                  out_feature_class=net_noduplisubsegs,
                                  join_attributes='ALL',
                                  output_type='LINE')
+
         arcpy.DeleteIdentical_management(net_noduplisubsegs,
-                                         fields="geom")
+                                         fields=arcpy.Describe(net_noduplisubsegs).shapeFieldName)
 
     if (not arcpy.Exists(net_dissolved)) or overwrite:
         print('---- Dissolving the  network')
@@ -610,11 +618,12 @@ def identify_strahler(in_net, in_dem, out_gdb, out_net, prefix, suffix, overwrit
 
     if (not arcpy.Exists(net_nodes_elv)) or overwrite:
         print('-------- Getting elevation for each point')
+        oidfn = arcpy.Describe(net_nodes25m).OIDFieldName
         Sample(in_rasters=in_dem,
                in_location_data=net_nodes25m,
                out_table=net_nodes_elv,
                resampling_type='NEAREST',
-               unique_id_field=arcpy.Describe(net_nodes25m).OIDFieldName,
+               unique_id_field=oidfn,
                statistics_type='MEDIAN',
                layout='ROW_WISE',
                generate_feature_class='TABLE')
@@ -629,7 +638,7 @@ def identify_strahler(in_net, in_dem, out_gdb, out_net, prefix, suffix, overwrit
 
         print("-------- Computing robust linear regression of elevation for each line...")
         coefs_dict = (net_nodes_elv_pd.loc[~net_nodes_elv_pd.bdalti_25m_mosaic_Band_1.isna()].groupby('ORIG_FID').
-                      apply(get_lr_coef, x='OBJECTID', y='bdalti_25m_mosaic_Band_1').
+                      apply(get_lr_coef, x=oidfn, y='bdalti_25m_mosaic_Band_1').
                       to_dict())
 
         elv_coef_fname = 'elv_coef'
@@ -646,7 +655,6 @@ def identify_strahler(in_net, in_dem, out_gdb, out_net, prefix, suffix, overwrit
         arcpy.CopyFeatures_management(net_conflusplit, net_conflusplit_directed_ini)
 
         # Create temporary ID field
-        tempIDfn = 'tempID'
         if not tempIDfn in [f.name for f in arcpy.ListFields(net_conflusplit_directed_ini)]:
             arcpy.AddField_management(net_conflusplit_directed_ini, tempIDfn, 'LONG')
             arcpy.CalculateField_management(
@@ -666,7 +674,8 @@ def identify_strahler(in_net, in_dem, out_gdb, out_net, prefix, suffix, overwrit
                                                  point_location='DANGLE')
         stub_list = {row[0] for row in arcpy.da.SearchCursor(net_conflusplit_dangle, [tempIDfn])}
         print("-------- Deleted {} stubs: lines with dangle points under 10 m".format(len(stub_list)))
-        with arcpy.da.UpdateCursor(net_conflusplit_directed_ini, [tempIDfn, 'geom_Length']) as cursor:
+        geofn = arcpy.Describe(net_conflusplit_directed_ini).shapeFieldName
+        with arcpy.da.UpdateCursor(net_conflusplit_directed_ini, [tempIDfn, '{}_Length'.format(geofn)]) as cursor:
             for row in cursor:
                 if (row[0] in stub_list) and (row[1] < 10):
                     cursor.deleteRow()
@@ -761,7 +770,8 @@ def enhance_network_topology(in_net, idfn, in_dem, temp_gdb, out_gdb, prefix, su
         while len(ids_not_to_delete) > 0:
             removal_output = remove_contained_lines(in_net=net_integrate,
                                                     temp_gdb=temp_gdb,
-                                                    idfn=idfn)
+                                                    idfn=idfn,
+                                                    check_type=False)
             ids_not_to_delete = removal_output[1]
             total_deleted_lines += len(removal_output[0])
 
@@ -776,7 +786,8 @@ def enhance_network_topology(in_net, idfn, in_dem, temp_gdb, out_gdb, prefix, su
         while len(ids_not_to_delete) > 0:
             removal_output = remove_contained_lines(in_net=net_integrate,
                                                     temp_gdb=temp_gdb,
-                                                    idfn=idfn)
+                                                    idfn=idfn,
+                                                    check_type=False)
             ids_not_to_delete = removal_output[1]
             total_deleted_lines += len(removal_output[0])
 
@@ -789,7 +800,8 @@ def enhance_network_topology(in_net, idfn, in_dem, temp_gdb, out_gdb, prefix, su
                       prefix=prefix,
                       suffix=suffix,
                       out_gdb=temp_gdb,
-                      out_net=net_wstrahler)
+                      out_net=net_wstrahler,
+                      overwrite=True)
 
     end_bh = time.time()
     print("RUNNING STRAHLER ROUTINE TOOK {0} s FOR RECORD {1}".format(
@@ -888,9 +900,14 @@ if not arcpy.Exists(bdtopo_noartif_bh):
 
 # Merge all lines between confluences and assign strahler order
 bh_numset = {row[0] for row in arcpy.da.SearchCursor(bdtopo_noartif_bh, 'CdBH')}
-for bh_num in bh_numset:
+for bh_num in ['04', '05', '06']:#bh_numset:
     if bh_num is not None:
         print("PROCESSING HYDROGAPHIC BASIN {}".format(bh_num))
+        temp_gdb = os.path.join(resdir, "scratch_{}.gdb".format(bh_num))
+        if not arcpy.Exists(temp_gdb):
+            arcpy.CreateFileGDB_management(out_folder_path=os.path.split(temp_gdb)[0],
+                                           out_name=os.path.split(temp_gdb)[1])
+
         bdtopo_noartif_sub = os.path.join(temp_gdb, 'bdtopo_noartif_sub_{}'.format(bh_num))
         arcpy.MakeFeatureLayer_management(bdtopo_noartif_bh, 'bdtopo_noartif_sub',
                                           where_clause="CdBH='{}'".format(bh_num))
@@ -906,6 +923,7 @@ for bh_num in bh_numset:
                                  suffix=bh_num,
                                  overwrite=False)
 
+
 # Check how many have a dangle point that is an end point - random sample
 
 ################################ Merge and export #####################################################################
@@ -916,8 +934,8 @@ if not arcpy.Exists(ddt_net_wstrahler):
                                          nongdbf=False, gdbf=True, fullpath=True)
     arcpy.Merge_management(ddt_net_wstrahler_list, ddt_net_wstrahler)
     ftodelete_list = [f.name for f in arcpy.ListFields(ddt_net_wstrahler) if f.name not in
-                      [arcpy.Describe(ddt_net_wstrahler).OIDFieldName, 'Shape', 'UID_CE', 'strahler', 'geom_Length',
-                       'Shape_Length']]
+                      [arcpy.Describe(ddt_net_wstrahler).OIDFieldName, 'Shape', 'UID_CE', 'strahler',
+                       arcpy.Describe(ddt_net_wstrahler).shapeFieldName]]
     arcpy.DeleteField_management(ddt_net_wstrahler, drop_field=ftodelete_list)
 
 if not arcpy.Exists(ddt_net_wstrahler_tab):
@@ -930,8 +948,10 @@ if not arcpy.Exists(bdtopo_wstrahler):
                                         nongdbf=False, gdbf=True, fullpath=True)
     arcpy.Merge_management(bdtopo_wstrahler_list, bdtopo_wstrahler)
     ftodelete_list = [f.name for f in arcpy.ListFields(bdtopo_wstrahler) if f.name not in
-                      [arcpy.Describe(bdtopo_wstrahler).OIDFieldName, 'Shape', 'ID', 'strahler', 'Shape_Length']]
+                      [arcpy.Describe(bdtopo_wstrahler).OIDFieldName, 'Shape', 'ID', 'strahler',
+                       arcpy.Describe(bdtopo_wstrahler).shapeFieldName]]
     arcpy.DeleteField_management(bdtopo_wstrahler, drop_field=ftodelete_list)
+
 if not arcpy.Exists(bdtopo_wstrahler_tab):
     print('Exporting attribute table to csv')
     arcpy.CopyRows_management(bdtopo_wstrahler, bdtopo_wstrahler_tab)
