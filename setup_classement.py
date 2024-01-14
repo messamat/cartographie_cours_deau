@@ -28,7 +28,9 @@ from arcpy.sa import *
 arcpy.CheckOutExtension('Spatial')
 arcpy.env.overwriteOutput = True
 arcpy.env.qualifiedFieldNames = False
-sys.stdout.reconfigure(encoding='utf-8')
+pyversion = sys.version_info
+if (pyversion.major == 3) and (pyversion.minor >= 7):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 #Utility functions
 def get_root_fromsrcdir():

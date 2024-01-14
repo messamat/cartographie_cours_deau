@@ -1,5 +1,5 @@
 import os
-import arcpy.analysis
+import arcpy
 import collections
 import time
 
@@ -87,7 +87,7 @@ def remove_contained_lines(in_net, idfn, precision_digits=2, delete_lenfield=Tru
     if check_type:
         cursor_cols.extend(['type_stand', 'type_stand_1'])
 
-    with (arcpy.da.UpdateCursor(selfinters_lines, cursor_cols) as cursor):
+    with arcpy.da.UpdateCursor(selfinters_lines, cursor_cols) as cursor:
         for row in cursor:
             # Only analyze intersections between two different lines
             if row[0] != row[1]:
@@ -159,8 +159,8 @@ def assign_strahler_splitline(in_net, prefix, suffix, idfield, in_strahler, temp
             split_order_pts_selfinters = defaultdict(list)
             split_order_pts_selfinters_undefined = defaultdict(set)
             split_higherorder_pts_selfinters = set()
-            with (arcpy.da.SearchCursor(in_net_bothendpts_selfinters,
-                                        [idfield, '{}_1'.format(idfield), 'strahler', 'strahler_1']) as cursor):
+            with arcpy.da.SearchCursor(in_net_bothendpts_selfinters,
+                                        [idfield, '{}_1'.format(idfield), 'strahler', 'strahler_1']) as cursor:
                 for row in cursor:
                     #Identify undefined lines connected to another line of the order of interest:
                     if ((row[0] != row[1]) and (row[1] not in split_order_pts_selfinters[row[0]])
@@ -466,8 +466,8 @@ def iterate_strahler(in_net, idfield, in_loop_ids_df, prefix, suffix, strahler_i
 
         # Get the set of lines intersecting each line with strahler_ini, excluding loops
         split_order_pts_selfinters = defaultdict(set)
-        with (arcpy.da.SearchCursor(in_net_bothendpts_selfinters,
-                                    [idfield, '{}_1'.format(idfield), 'strahler', 'strahler_1']) as cursor):
+        with arcpy.da.SearchCursor(in_net_bothendpts_selfinters,
+                                    [idfield, '{}_1'.format(idfield), 'strahler', 'strahler_1']) as cursor:
             for row in cursor:
                 if (((row[0] != row[1]) and (row[1] not in split_order_pts_selfinters[row[0]])
                     and (row[2] is None) and (row[3] == strahler_ini))
@@ -568,9 +568,8 @@ def assign_strahler_to_stubs(in_net, in_stublist, idfield, prefix, suffix, max_s
     # When multiple stubs are connected to a line with a stream order -- only assign stream order to one stub
     stubs_so1_list = set()
     connected_to_stubs_list = set()
-    with (arcpy.da.SearchCursor(net_conflusplit_unsplit_segs_bothendpts_inters,
-                                [idfield, 'LENGTH_GEO', 'strahler', 'strahler_1', "{}_1".format(idfield)])
-          as cursor):
+    with arcpy.da.SearchCursor(net_conflusplit_unsplit_segs_bothendpts_inters,
+                                [idfield, 'LENGTH_GEO', 'strahler', 'strahler_1', "{}_1".format(idfield)]) as cursor:
         for row in cursor:
             if ((row[0] in in_stublist) and (row[1] <= max_stub_length)
                     and (row[2] is None) and (row[3] is not None) and
@@ -793,8 +792,9 @@ def enhance_network_topology(in_net, idfn, in_dem, out_net, temp_gdb, prefix, su
     net_integrate = os.path.join(temp_gdb, '{0}_integrate_{1}'.format(prefix, suffix))
 
     #Turn off metadata logging for performance
-    if arcpy.GetLogMetadata():
-        arcpy.SetLogMetadata(False)
+    if float(arcpy.GetInstallInfo()['Version']) >= 3:
+        if arcpy.GetLogMetadata():
+            arcpy.SetLogMetadata(False)
 
     # Remove all lines which are fully contained within another line
     total_deleted_lines = 0
@@ -812,8 +812,8 @@ def enhance_network_topology(in_net, idfn, in_dem, out_net, temp_gdb, prefix, su
 
         # Merge vertices that are within 10 cm from each other
         # (to deal with extremely small disconnections and nearly overlapping lines)
-        arcpy.PairwiseIntegrate_analysis(in_features=net_integrate,
-                                         cluster_tolerance='0.1')
+        arcpy.Integrate_analysis(in_features=net_integrate,
+                                 cluster_tolerance='0.1')
 
         # Integrating joined lines that were within a few centimeters from each other created more overlapping
         # features -- delete them.
@@ -880,14 +880,20 @@ if not arcpy.Exists(ddt_net_noartif_bh):
 
 # Merge all lines between confluences and assign strahler order
 bh_numset = {row[0] for row in arcpy.da.SearchCursor(ddt_net_noartif_bh, 'CdBH')}
-for bh_num in ['01', '02']:#bh_numset:
+for bh_num in ['04', '05', '06']:#bh_numset:
     if bh_num is not None:
         print("PROCESSING HYDROGAPHIC BASIN {}".format(bh_num))
+        temp_gdb = os.path.join(resdir, "scratch_{}.gdb".format(bh_num))
+        if not arcpy.Exists(temp_gdb):
+            arcpy.CreateFileGDB_management(out_folder_path=os.path.split(temp_gdb)[0],
+                                           out_name=os.path.split(temp_gdb)[1])
+
         ddt_net_noartif_sub = os.path.join(temp_gdb, 'ddt_net_noartif_sub_{}'.format(bh_num))
-        arcpy.MakeFeatureLayer_management(ddt_net_noartif_bh, 'ddt_net_noartif_sub',
-                                          where_clause="CdBH='{}'".format(bh_num))
-        arcpy.CopyFeatures_management('ddt_net_noartif_sub', ddt_net_noartif_sub)
-        arcpy.Delete_management('ddt_net_noartif_sub')
+        if not arcpy.Exists(ddt_net_noartif_sub):
+            arcpy.MakeFeatureLayer_management(ddt_net_noartif_bh, 'ddt_net_noartif_sub',
+                                              where_clause="CdBH='{}'".format(bh_num))
+            arcpy.CopyFeatures_management('ddt_net_noartif_sub', ddt_net_noartif_sub)
+            arcpy.Delete_management('ddt_net_noartif_sub')
 
         net_wstrahler = os.path.join(pregdb, 'ddt_net_noartif_strahler_{}'.format(bh_num))
         enhance_network_topology(in_net=ddt_net_noartif_sub,
