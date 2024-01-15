@@ -3,7 +3,7 @@ import shapely
 from setup_classement import * #Get directory structure and packages
 import pygeoops
 
-overwrite = False #Whether to overwrite outputs or skip them if done
+overwrite = True #Whether to overwrite outputs or skip them if done
 
 datdir = Path(datdir)
 resdir = Path(resdir)
@@ -13,6 +13,7 @@ geometadata_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[
 geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_réseau_SIG',
                                na_values='NA', keep_default_na=False)
 
+#-------------- Output paths ---------------------------------
 #Create output directory
 out_dir = Path(resdir, 'reseaux_departementaux_copies')
 out_net_path = Path(resdir, 'carto_loi_eau_france.gpkg')
@@ -48,7 +49,7 @@ def create_editable_lyr(in_copylyr, out_editlyr, in_encoding, overwrite):
                     #x=0
                     for elem in input:
                         # GeoJSON to shapely geometry
-                        if elem['geometry'] is not None:
+                        if elem['geometry'] is not None: #otherwise, remove record
                             if elem['geometry'].type == 'MultiLineString':
                                 out_coords = [l for l in elem['geometry'].coordinates if len(l) > 1]
                                 if len(out_coords) > 0:
@@ -211,7 +212,9 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
                                              axis = 1)
 
         # Reproject all to the same layer 2154
-        if net.crs.to_epsg() != 2514:
+        if net.crs.to_epsg() is None:
+            net = net.set_crs(row_metadata['Projection'], allow_override=True)
+        if net.crs.to_epsg() != int(2514):
             net_proj = net.to_crs("epsg:2154")
         else:
             net_proj = net

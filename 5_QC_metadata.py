@@ -1,6 +1,6 @@
 from setup_classement import * #Get directory structure and packages
 
-overwrite = False#Whether to overwrite outputs or skip them if done
+overwrite = True #Whether to overwrite outputs or skip them if done
 datdir = Path(datdir)
 
 #Read compilation of metadata
@@ -142,7 +142,7 @@ def QC_row_metadata(in_row, in_dict):
             check_colmatch(in_row["Nom de l'attribut auxiliaire désignant le type d'écoulement"], net), #auxi_colname_match
             check_colmatch(in_row["Nom de l'attribut désignant le régime hydrologique"], net), #'regime_colname_match'
             check_colmatch(in_row["Nom de l'attribut désignant la méthode d'identification de l'écoulement"], net), #natident_colname_match
-            check_colmatch(in_row["Nom de l'attribut désignant la source de la modification, de la suppression du tronçon BD TOPO®, ou de l’ajout d’un nouveau tronçon"], net), #origmodif_colname_match
+            check_colmatch(in_row["Nom de l'attribut désignant la source de la modification; de la suppression du tronçon BD TOPO; ou de l’ajout d’un nouveau tronçon"], net), #origmodif_colname_match
             check_colmatch(in_row["Nom de l'attribut désignant la date de l'identification du type d'écoulement"], net) #dateident_colname_match
         ]
     else:

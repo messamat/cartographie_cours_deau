@@ -812,7 +812,7 @@ def enhance_network_topology(in_net, idfn, in_dem, out_net, temp_gdb, prefix, su
 
         # Merge vertices that are within 10 cm from each other
         # (to deal with extremely small disconnections and nearly overlapping lines)
-        arcpy.Integrate_analysis(in_features=net_integrate,
+        arcpy.Integrate_management(in_features=net_integrate,
                                  cluster_tolerance='0.1')
 
         # Integrating joined lines that were within a few centimeters from each other created more overlapping
@@ -880,7 +880,7 @@ if not arcpy.Exists(ddt_net_noartif_bh):
 
 # Merge all lines between confluences and assign strahler order
 bh_numset = {row[0] for row in arcpy.da.SearchCursor(ddt_net_noartif_bh, 'CdBH')}
-for bh_num in ['04', '05', '06']:#bh_numset:
+for bh_num in ['03']:#bh_numset:
     if bh_num is not None:
         print("PROCESSING HYDROGAPHIC BASIN {}".format(bh_num))
         temp_gdb = os.path.join(resdir, "scratch_{}.gdb".format(bh_num))
