@@ -448,6 +448,60 @@ if not arcpy.Exists(irrig_coms_bvinters_tab):
     arcpy.Delete_management(irrig_coms_bvinters)
     arcpy.Delete_management(irrig_coms_lcstats_tab)
 
+#--------------------------------- Get extent of artificial basins -----------------------------------------------------
+#THis is mostly meant to account for the extensive hydraulic works that accompany coastal basins in a few departments.
+#Notably cultivated coastal marshes for sea salt
+#Filter and merge basins
+basins_filtered_fr = os.path.join(pregdb, 'artificial_basins_fr')
+
+if not arcpy.Exists(basins_filtered_fr):
+    print('Filtering basins...')
+    basins_filelist = getfilelist(bdtopo2019_dir, "SURFACE_HYDROGRAPHIQUE.shp$")
+    #basins_shp = basins_filelist[0]
+
+    temp_basins_list= []
+    for basins_shp in basins_filelist:
+        temp_lyr=os.path.join(tempgdb,
+                              "{}_basins".format(
+                                  re.sub('[-]', '_',
+                                         Path(basins_shp).parts[-3])
+                              ))
+
+        if not arcpy.Exists(temp_lyr):
+            print("Processing {}".format(os.path.split(temp_lyr)[1]))
+
+            arcpy.MakeFeatureLayer_management(
+                in_features=basins_shp,
+                out_layer='basins_lyr',
+                where_clause="(NATURE IN ('Marais', 'Réservoir-bassin')) AND (ORIGINE IN ('Artificielle', 'Naturelle aménagée'))"
+            )
+
+            arcpy.CopyFeatures_management(in_features='basins_lyr',
+                                          out_feature_class=temp_lyr
+                                          )
+            temp_basins_list.append(temp_lyr)
+            arcpy.Delete_management('basins_lyr')
+        else:
+            temp_basins_list.append(temp_lyr)
+
+    print("Merging all basin layers...")
+    arcpy.Merge_management(inputs=temp_basins_list, output=basins_filtered_fr)
+
+    print("Deleting temporary building layers...")
+    for temp_lyr in temp_basins_list:
+        arcpy.Delete_management(temp_lyr)
+
+#Intersect with sub-basins and departments
+basins_filtered_cats_inters = os.path.join(pregdb, 'artificial_basins_fr_bvinters')
+basins_filtered_cats_inters_tab = os.path.join(resdir, 'artificial_basins_fr_bvinters.csv')
+
+arcpy.analysis.Intersect([basins_filtered_fr, cats_hybasdeps],
+                         out_feature_class=basins_filtered_cats_inters,
+                         join_attributes="ALL")
+arcpy.CopyRows_management(in_rows=basins_filtered_cats_inters,
+                          out_table=basins_filtered_cats_inters_tab)
+
+
 #--------------------------------- Create barrier points --------------------------------------------------------------
 if not arcpy.Exists(barriers_pts_proj):
     barriers_pts = os.path.join(pregdb, 'barriers_amber_wgs84')
