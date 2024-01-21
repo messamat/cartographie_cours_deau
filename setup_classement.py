@@ -3,6 +3,7 @@
 import chardet
 from datetime import date
 from collections import defaultdict
+import collections
 import geopandas as gpd
 from inspect import getsourcefile
 import itertools
@@ -18,6 +19,7 @@ import requests
 import shapefile
 import shutil
 import sys
+import time
 import urllib3
 import xmltodict
 from flatten_dict import flatten #INstall from https://github.com/ianlini/flatten-dict #github connection solved with https://stackoverflow.com/questions/72486457/fatal-unable-to-connect-to-github-com-github-com0-140-82-121-4-errno-unkno #Then .\pyenv\python.exe -m pip install git+git://github.com/ianlini/flatten-dict.git
