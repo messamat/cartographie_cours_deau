@@ -1,8 +1,4 @@
-import os
 import arcpy
-import collections
-import time
-
 from setup_classement import *
 from sklearn.linear_model import HuberRegressor, LinearRegression
 
@@ -38,6 +34,7 @@ bdalti_mosaic = os.path.join(pregdb, "bdalti_25m_mosaic")
 ddt_net_endpts = os.path.join(pregdb, 'carto_loi_eau_fr_endpts')
 ddt_net_endpts_inters = os.path.join(pregdb, 'carto_loi_eau_fr_endpts_inters')
 ddt_net_isolatedsegs = os.path.join(pregdb, 'carto_loi_eau_fr_isolated')
+ddt_net_isolatedsegs_wbjoin = os.path.join(pregdb, 'carto_loi_eau_fr_isolated_wbjoin')
 
 ddt_net_artif = os.path.join(pregdb, 'carto_loi_eau_fr_artif')
 ddt_net_noartif = os.path.join(pregdb, 'carto_loi_eau_fr_noartif')
@@ -56,6 +53,8 @@ ddt_net_wstrahler_tab = os.path.join(resdir, 'carto_loi_eau_noartif_strahler_fr.
 
 bdtopo_wstrahler = os.path.join(pregdb, 'bdtopo_noartif_strahler_fr')
 bdtopo_wstrahler_tab = os.path.join(resdir, 'bdtopo_noartif_strahler_fr.csv')
+
+ddt_cleaned_integrated_network = os.path.join(pregdb, 'ddt_net_noartif_integrate_fr')
 
 # ------------- TRY TO ENHANCE DDT AND BDTOPO NETWORKS WITH FLOW DIRECTION --------------------------------------------------------
 # Remove lines that are fully contained within other ones without deleting both lines if perfect overlap between two lines
@@ -836,7 +835,7 @@ def enhance_network_topology(in_net, idfn, in_dem, out_net, temp_gdb, prefix, su
                       out_gdb=temp_gdb,
                       temp_gdb='memory',
                       out_net=out_net,
-                      overwrite=True)
+                      overwrite=False)
 
     end_bh = time.time()
     print("RUNNING STRAHLER ROUTINE TOOK {0} s FOR RECORD {1}".format(
@@ -880,10 +879,10 @@ if not arcpy.Exists(ddt_net_noartif_bh):
 
 # Merge all lines between confluences and assign strahler order
 bh_numset = {row[0] for row in arcpy.da.SearchCursor(ddt_net_noartif_bh, 'CdBH')}
-for bh_num in ['03']:#bh_numset:
+for bh_num in bh_numset:
     if bh_num is not None:
         print("PROCESSING HYDROGAPHIC BASIN {}".format(bh_num))
-        temp_gdb = os.path.join(resdir, "scratch_{}.gdb".format(bh_num))
+        temp_gdb = os.path.join(resdir, "scratch_{}_ddtnet.gdb".format(bh_num))
         if not arcpy.Exists(temp_gdb):
             arcpy.CreateFileGDB_management(out_folder_path=os.path.split(temp_gdb)[0],
                                            out_name=os.path.split(temp_gdb)[1])
@@ -903,7 +902,15 @@ for bh_num in ['03']:#bh_numset:
                                  out_net=net_wstrahler,
                                  prefix='ddt_net_noartif',
                                  suffix=bh_num,
-                                 overwrite=True)
+                                 overwrite=False)
+
+#Get a slightly cleaner version of the database (after removing those fully overlapping lines even if not duplicate)
+cleanintegrate_bhlist = [os.path.join(resdir, "scratch_{}_ddtnet.gdb".format(bh_num),
+                                     'ddt_net_noartif_integrate_{}'.format(bh_num)) for bh_num in bh_numset
+                        if bh_num is not None]
+if ((not arcpy.Exists(ddt_cleaned_integrated_network)) or overwrite) and \
+        all([arcpy.Exists(lyr) for lyr in cleanintegrate_bhlist]):
+    arcpy.Merge_management(inputs=cleanintegrate_bhlist, output=ddt_cleaned_integrated_network, add_source=True)
 
 ############################ RUN ANALYSIS FOR BDTOPO ###################################################################
 # Remove all truly artificial watercourses that may disrupt topology
@@ -941,10 +948,10 @@ if not arcpy.Exists(bdtopo_noartif_bh):
 
 # Merge all lines between confluences and assign strahler order
 bh_numset = {row[0] for row in arcpy.da.SearchCursor(bdtopo_noartif_bh, 'CdBH')}
-for bh_num in ['02', '03', '04']:#bh_numset:
+for bh_num in bh_numset:
     if bh_num is not None:
         print("PROCESSING HYDROGAPHIC BASIN {}".format(bh_num))
-        temp_gdb = os.path.join(resdir, "scratch_{}.gdb".format(bh_num))
+        temp_gdb = os.path.join(resdir, "scratch_{}_bdtopo.gdb".format(bh_num))
         if not arcpy.Exists(temp_gdb):
             arcpy.CreateFileGDB_management(out_folder_path=os.path.split(temp_gdb)[0],
                                            out_name=os.path.split(temp_gdb)[1])
@@ -972,12 +979,13 @@ for bh_num in ['02', '03', '04']:#bh_numset:
 ######################REMERGE ARTIFICIAL LINES#########################################################################
 if not arcpy.Exists(ddt_net_wstrahler):
     print('Merging all regions of ddt net with Strahler order')
-    ddt_net_wstrahler_list = getfilelist(dir=pregdb, repattern='carto_loi_eau_noartif_strahler_[0-9]{2}$',
+    ddt_net_wstrahler_list = getfilelist(dir=pregdb, repattern='ddt_net_noartif_strahler_[0-9]{2}$',
                                          nongdbf=False, gdbf=True, fullpath=True)
     arcpy.Merge_management(ddt_net_wstrahler_list, ddt_net_wstrahler)
+    shapefn = arcpy.Describe(ddt_net_wstrahler).shapeFieldName
     ftodelete_list = [f.name for f in arcpy.ListFields(ddt_net_wstrahler) if f.name not in
-                      [arcpy.Describe(ddt_net_wstrahler).OIDFieldName, 'Shape', 'UID_CE', 'strahler',
-                       arcpy.Describe(ddt_net_wstrahler).shapeFieldName]]
+                      [arcpy.Describe(ddt_net_wstrahler).OIDFieldName, 'UID_CE', 'strahler', 'geom_Length',
+                       shapefn, '{}_Length'.format(shapefn)]]
     arcpy.DeleteField_management(ddt_net_wstrahler, drop_field=ftodelete_list)
 
 if not arcpy.Exists(ddt_net_wstrahler_tab):
@@ -989,9 +997,10 @@ if not arcpy.Exists(bdtopo_wstrahler):
     bdtopo_wstrahler_list = getfilelist(dir=pregdb, repattern='bdtopo_noartif_strahler_[0-9]{2}$',
                                         nongdbf=False, gdbf=True, fullpath=True)
     arcpy.Merge_management(bdtopo_wstrahler_list, bdtopo_wstrahler)
+    shapefn = arcpy.Describe(bdtopo_wstrahler).shapeFieldName
     ftodelete_list = [f.name for f in arcpy.ListFields(bdtopo_wstrahler) if f.name not in
                       [arcpy.Describe(bdtopo_wstrahler).OIDFieldName, 'Shape', 'ID', 'strahler',
-                       arcpy.Describe(bdtopo_wstrahler).shapeFieldName]]
+                       shapefn, '{}_Length'.format(shapefn)]]
     arcpy.DeleteField_management(bdtopo_wstrahler, drop_field=ftodelete_list)
 
 if not arcpy.Exists(bdtopo_wstrahler_tab):
@@ -1001,7 +1010,7 @@ if not arcpy.Exists(bdtopo_wstrahler_tab):
 # ------------- IDENTIFY DISCONNECTIONS --------------------------------------------------------------------------------
 # Convert lines to end points
 if not arcpy.Exists(ddt_net_endpts):
-    arcpy.FeatureVerticesToPoints_management(in_features=ddt_net,
+    arcpy.FeatureVerticesToPoints_management(in_features=ddt_cleaned_integrated_network,
                                              out_feature_class=ddt_net_endpts,
                                              point_location="BOTH_ENDS")
 # Intersect end points
@@ -1029,7 +1038,7 @@ if not arcpy.Exists(ddt_net_isolatedsegs):
     # Count number of end points with intersecting points per segment
     lines_inters_pd_ptswinters = lines_inters_pd_pts_interscount.groupby(by='UID_CE').size()
     # Examine only those with two end points intersecting with other points (excluding first and last order streams)
-    # And segments with a total of intersecting points of 3 and under, including those either without confluence
+    # And segments with a total of intersecting points of 3 and under, including those either without confluence,
     # with upstream confluence or downstream bifurcation
     sel1 = (lines_inters_pd_pts_interscount.groupby('UID_CE').sum() < 3)
     sel2 = (lines_inters_pd_ptswinters == 2)
@@ -1045,14 +1054,83 @@ if not arcpy.Exists(ddt_net_isolatedsegs):
     simple_lines_pd_isolated_ID = sel3[sel3].index
 
     # Copy ddt_net the delete all features but those to inspect, add fields with types of the surrounding segments
-    arcpy.CopyFeatures_management(ddt_net, ddt_net_isolatedsegs)
+    arcpy.CopyFeatures_management(ddt_cleaned_integrated_network, ddt_net_isolatedsegs)
     with arcpy.da.UpdateCursor(ddt_net_isolatedsegs, ["UID_CE"]) as cursor:
         for row in cursor:
             if row[0] not in simple_lines_pd_isolated_ID:
                 cursor.deleteRow()
 
+#Intersect isolated segments with waterbodies
+bdtopo2019_dir = os.path.join(anci_dir, 'bdtopo191')
+wb_fr = os.path.join(pregdb, 'standard_water_bodies_fr')
+
+if not arcpy.Exists(wb_fr):
+    print('Filtering wb...')
+    wb_filelist = getfilelist(bdtopo2019_dir, "SURFACE_HYDROGRAPHIQUE.shp$")
+    #wb_shp = wb_filelist[0]
+
+    temp_wb_list= []
+    for wb_shp in wb_filelist:
+        temp_lyr=os.path.join(temp_gdb,
+                              "{}_standing_water_bodies".format(
+                                  re.sub('[-]', '_',
+                                         Path(wb_shp).parts[-3])
+                              ))
+
+        if not arcpy.Exists(temp_lyr):
+            print("Processing {}".format(os.path.split(temp_lyr)[1]))
+
+            arcpy.MakeFeatureLayer_management(
+                in_features=wb_shp,
+                out_layer='wb_lyr',
+                where_clause="(NATURE NOT IN ('Aqueduc', 'Canal', 'Conduit', 'buse', 'Conduit forcé', 'Delta',"
+                             " 'Ecoulement canalisé', 'Ecoulement endoréique', 'Ecoulement hyporhéique', 'Ecoulement karstique'"
+                             "'Ecoulement natural', 'Ecoulement phréatique', 'Glacier, névé', 'Ravine'))"
+            )
+            arcpy.CopyFeatures_management(in_features='wb_lyr',
+                                          out_feature_class=temp_lyr
+                                          )
+            temp_wb_list.append(temp_lyr)
+            arcpy.Delete_management('wb_lyr')
+        else:
+            temp_wb_list.append(temp_lyr)
+
+    print("Merging all water body layers...")
+    arcpy.Merge_management(inputs=temp_wb_list, output=wb_fr)
+
+    print("Deleting temporary water body layers...")
+    for temp_lyr in temp_wb_list:
+        arcpy.Delete_management(temp_lyr)
+
+arcpy.SpatialJoin_analysis(target_features=ddt_net_isolatedsegs,
+                           join_features=wb_fr,
+                           out_feature_class=ddt_net_isolatedsegs_wbjoin,
+                           join_operation='JOIN_ONE_TO_ONE',
+                           join_type='KEEP_ALL',
+                           match_option='INTERSECT',
+                           search_radius='10 meters')
+
+ddt_net_isolatedsegs_nowb = os.path.join(pregdb, 'carto_loi_eau_fr_isolated_nowb')
+arcpy.MakeFeatureLayer_management(ddt_net_isolatedsegs_wbjoin, 'isolated_nowb',
+                                  where_clause='NATURE IS NULL')
+arcpy.CopyFeatures_management('isolated_nowb',
+                              ddt_net_isolatedsegs_nowb
+                              )
+
 # Manually go through them to check which ones are "unjustified"
 # If line segment only partly contained in standing water body
+# 90595, 96187, 101833, 251887, 260673, 727344, 748791, 749307,
+# 767318,768913,769010, 769246, 769292, 769306, 769429,
+#769495, 770953, 772361,774560, 774560, 778432, 779176,
+#779961, 801848, 801853,802198, 803689, 815363, 955918,
+#1200475, 1387991, 1393441,1394268, 1395810, 1400521,
+#1412822, 1413658, 1597053, 1597331, 1598104,
+# 1598174, 1598701, 1604773, 1606166, 1620354, 1636732,
+#1704698, 1704786, 1710524, 1713177, 1713252, 1715001,
+#
+
+
+
 # 6071, 7628, 8646, 9834, 9916,
 
 
