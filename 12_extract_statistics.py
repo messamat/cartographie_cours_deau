@@ -83,9 +83,23 @@ config_dict = {
     ,'crp_pc_use': ['cell', os.path.join(lcav_dir, 'oso_crp_acc'), ce_net_prpts, 'MEAN']
     ,'scr_pc_use': ['cell', os.path.join(lcav_dir, 'oso_scr_acc'), ce_net_prpts, 'MEAN']
     ,'vny_pc_use': ['cell', os.path.join(lcav_dir, 'oso_vny_acc'), ce_net_prpts, 'MEAN']
+    ,'veg_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_veg'), cats_hybasdeps, 'MEAN']
+    ,'for_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_for'), cats_hybasdeps, 'MEAN']
+    ,'wet_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_wet'), cats_hybasdeps, 'MEAN']
+    ,'gla_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_cl22.tif'), cats_hybasdeps, 'MEAN']
+    ,'rck_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_cl20.tif'), cats_hybasdeps, 'MEAN']
+    ,'imp_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_imp'), cats_hybasdeps, 'MEAN']
+    ,'agr_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_agr'), cats_hybasdeps, 'MEAN']
+    ,'crp_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_crp'), cats_hybasdeps, 'MEAN']
+    ,'scr_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_scr'), cats_hybasdeps, 'MEAN']
+    ,'vny_pc_sse': ['zonal', os.path.join(lcav_dir, 'oso_cl15.tif'), cats_hybasdeps, 'MEAN']
     ,'ppc_in_sav': ['zonal', os.path.join(pregdb, 'insee_pop_interp200m'), cats_hybasdeps_LAEA, 'SUM']
     ,'ppc_in_uav': ['cell', os.path.join(pregdb, 'insee_pop_interp200m_acc'), cats_hybasdeps_LAEA, 'SUM']
 }
+
+lc_class_dict = {1:'urba1', 2:'urba2', 3:'indus', 4:'roads', 5:'wioil', 6:'straw', 7:'spoil', 8:"soy", 9:"sunfl",
+              10:"corn", 11:"rice", 12:"roots", 13:"pastu", 14:"orchd", 15:"vinyd", 16:"forbr", 17:"forco",
+              18:"grass", 19:"heath", 20:"rocks", 21:"beach", 22:'glasn', 23:'water'}
 
 horizon_lims = [0, 5, 15, 30, 60, 100, 200]
 horizons = ["{0}_{1}".format(horizon_lims[:-1][i], horizon_lims[1:][i])

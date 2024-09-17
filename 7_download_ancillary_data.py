@@ -364,6 +364,7 @@ if not os.path.exists(out_bnpe_chroniques_unzipped_path):
 """https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.15454/BPN57S"""
 
 #---- Lithology --------------------------------------------------------------------------------------------------------
+#-> should try GEO-LIM. Impressive visual match with drainage density. https://www.tandfonline.com/doi/full/10.1080/17445647.2019.1692082
 #BD Charm-50
 """https://www.geocatalogue.fr/Detail.do?fileIdentifier=94636790-8615-11dc-9e02-0050568151b7"""
 #S_FGEOL Formations géologique polygons

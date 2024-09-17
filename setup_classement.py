@@ -3,6 +3,7 @@
 import chardet
 from datetime import date
 from collections import defaultdict
+import collections
 import geopandas as gpd
 from inspect import getsourcefile
 import itertools
@@ -18,6 +19,7 @@ import requests
 import shapefile
 import shutil
 import sys
+import time
 import urllib3
 import xmltodict
 from flatten_dict import flatten #INstall from https://github.com/ianlini/flatten-dict #github connection solved with https://stackoverflow.com/questions/72486457/fatal-unable-to-connect-to-github-com-github-com0-140-82-121-4-errno-unkno #Then .\pyenv\python.exe -m pip install git+git://github.com/ianlini/flatten-dict.git
@@ -28,7 +30,9 @@ from arcpy.sa import *
 arcpy.CheckOutExtension('Spatial')
 arcpy.env.overwriteOutput = True
 arcpy.env.qualifiedFieldNames = False
-sys.stdout.reconfigure(encoding='utf-8')
+pyversion = sys.version_info
+if (pyversion.major == 3) and (pyversion.minor >= 7):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 #Utility functions
 def get_root_fromsrcdir():
@@ -57,10 +61,13 @@ def getwkspfiles(dir, repattern=None):
     return ([os.path.join(dir, f) for f in filenames_list])
     arcpy.ClearEnvironment('workspace')
 
-def getfilelist(dir, repattern=None, gdbf=True, nongdbf=True, fullpath=False):
+def getfilelist(dir, repattern=None, nongdbf=True, gdbf=False, fullpath=False):
     """Function to iteratively go through all subdirectories inside 'dir' path
     and retrieve path for each file that matches "repattern"
     gdbf and nongdbf allows the user to choose whether to consider ArcGIS workspaces (GDBs) or not or exclusively"""
+
+    if isinstance(dir, Path):
+        dir = str(dir)
 
     try:
         if arcpy.Describe(dir).dataType == 'Workspace':

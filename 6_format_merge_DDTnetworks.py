@@ -1,16 +1,19 @@
 import fiona
 import shapely
 from setup_classement import * #Get directory structure and packages
+import pygeoops
 
-overwrite = False #Whether to overwrite outputs or skip them if done
+overwrite = True #Whether to overwrite outputs or skip them if done
 
 datdir = Path(datdir)
 resdir = Path(resdir)
 
 #Read compilation of metadata
 geometadata_path = list(datdir.glob('metadonnes_cartographie_cours_deau*xlsx'))[-1] #Get most recent table
-geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_réseau_SIG')
+geometadata_pd = pd.read_excel(geometadata_path, sheet_name = 'Métadonnées_réseau_SIG',
+                               na_values='NA', keep_default_na=False)
 
+#-------------- Output paths ---------------------------------
 #Create output directory
 out_dir = Path(resdir, 'reseaux_departementaux_copies')
 out_net_path = Path(resdir, 'carto_loi_eau_france.gpkg')
@@ -46,7 +49,7 @@ def create_editable_lyr(in_copylyr, out_editlyr, in_encoding, overwrite):
                     #x=0
                     for elem in input:
                         # GeoJSON to shapely geometry
-                        if elem['geometry'] is not None:
+                        if elem['geometry'] is not None: #otherwise, remove record
                             if elem['geometry'].type == 'MultiLineString':
                                 out_coords = [l for l in elem['geometry'].coordinates if len(l) > 1]
                                 if len(out_coords) > 0:
@@ -184,6 +187,7 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
                             sep=';')
                         if 'NULL' in cats_orig:
                             cats_orig.append(str(np.nan))
+                            cats_orig.append(str(None))
 
                         if not pd.isnull(in_row_net['type_stand']):
                             if isinstance(in_row_net['type_stand'], float):
@@ -201,13 +205,16 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
         colNAs_formatted['nrows'] = len(net)
         colNAs_formatted['dep_code'] = row_metadata['Numéro']
 
+        #in_row_net = net.iloc[100,:]
         net.loc[:, 'type_stand'] = net.apply(recat_gpdcol,
                                              in_row_metadata=row_metadata,
                                              in_dict_recat=dict_recat_type_ecoul,
                                              axis = 1)
 
         # Reproject all to the same layer 2154
-        if net.crs.to_epsg() != 2514:
+        if net.crs.to_epsg() is None:
+            net = net.set_crs(row_metadata['Projection'], allow_override=True)
+        if net.crs.to_epsg() != int(2514):
             net_proj = net.to_crs("epsg:2154")
         else:
             net_proj = net
@@ -221,7 +228,7 @@ def format_net(in_net_path, in_geometadata_pd, overwrite):
         print('No metadata associated with this layer. Skipping.')
 
 colNAs_formatted_dict = {}
-#in_net_path = net_copylist[6]
+# in_net_path = net_copylist[43]
 for net_path in net_copylist:
     #print(net_path)
     colNAs_formatted_dict[net_path] = format_net(in_net_path=net_path,
@@ -232,7 +239,7 @@ pd.concat(colNAs_formatted_dict.values(), axis=0).to_csv(out_colNAs_tab)
 
 #Format Aisne -------------------------
 print('Formatting data for the Aisne department')
-aisne_editfile = getfilelist(Path(out_dir, 'D2_Aisne'), '.*_edit[.]gpkg')[0]
+aisne_editfile = getfilelist(os.path.join(out_dir, 'D2_Aisne'), '.*_edit[.]gpkg', gdbf=False)[0]
 aisne_gpd = gpd.read_file(aisne_editfile)
 
 #Merge fields indicating status
@@ -273,7 +280,7 @@ sel_cols = ["type_stand","type_aux","regime","regime2", "nat_id", "nat_id2", "or
             ]
 if not Path(out_net_path).exists() or overwrite:
     print('Merging all layers')
-    net_editlist = getfilelist(out_dir, '.*_edit[.]gpkg$')
+    net_editlist = getfilelist(out_dir, '.*_edit[.]gpkg$', gdbf=False)
     net_gpdlist = []
     for net_path in net_editlist:
         print(net_path)
