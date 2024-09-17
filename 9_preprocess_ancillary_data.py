@@ -932,3 +932,9 @@ if not arcpy.Exists(pop_ras_200m): #This may take 12-24h to process, on a good c
                                            out_rasterdataset=pop_ras_200m,
                                            cell_assignment='SUM',
                                            cellsize=200)
+
+
+#------------------------------------------ BD TOPO lotic water bodies ------------------------------------------------------
+#BDTOPO 2015
+bdtopo2015_dir = os.path.join(anci_dir, "bdtopo151")
+bdtopo2015_ce_filelist = getfilelist(bdtopo2015_dir, "TRONCON_COURS_EAU.SHP$")
