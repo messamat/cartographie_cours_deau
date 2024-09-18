@@ -42,28 +42,58 @@ All GIS analyses in this study require an ESRI ArcGIS Pro license including the 
 which itself requires a Windows OS. We used the Python Arcpy module associated with ArcGIS Pro 3.1 in Python 3.9.
 
 ## Workflow
+In subsequent codes, common acronyms include:
+- ce: "cours d'eau", means watercourse
+- nce: "non cours d'eau", means non-watercourse
+- net: network
+- deps: departments
+- coms: "communes", means municipality
+- ddt: Direction Départementale des Territoires (administrative entity in charge of mapping watercourses at the departmental level)
+- cats: catchments ("bassin versant topographique BD Topage")
+  
 ### Utility codes
 - [setup_classement.py](https://github.com/messamat/cartographie_cours_deau/blob/master/setup_classement.py) : 
 import libraries, define folder structure, and basic utility functions. Called from within other scripts.
 
 ### Download and format cartographic data from departments
+This part of the workflow is entirely conducted with open-source packages.
 - [1_googlesearch_DDTwebsite_bydept.py](https://github.com/messamat/cartographie_cours_deau/blob/master/1_googlesearch_DDTwebsite_bydept.py): 
 automatically search google for "cartographie des cours d'eau [department name]" and returns the top 3 results for inspection.
 - [2_get_DDThtml_bydept.py](https://github.com/messamat/cartographie_cours_deau/blob/master/2_get_DDThtml_bydept.py): 
-download 
+download an HTML snapshot of the DDT website for archival
+
+An analysis of all departmental websites and of the inter-ministry data catalogue yielded an extensive metadata table 
+(available upon request to the authors). This metadata table constitutes the basis for the subsequent workflow 
+downloading and formatting the departmental maps of watercourses. 
+
 - [3_download_data_geoide.py](https://github.com/messamat/cartographie_cours_deau/blob/master/3_download_data_geoide.py): 
-awra
+download and unzip all departmental maps based on URLs from a metadata table
 - [4_get_metadata_lyrs.py](https://github.com/messamat/cartographie_cours_deau/blob/master/4_get_metadata_lyrs.py): 
-compute 
+create a csv table listing all departmental datasets that are available in local data repository, count the number of features classes in each,
+and list all attribute names.
 - [05_QC_metadata.py](https://github.com/messamat/cartographie_cours_deau/blob/master/5_QC_metadata.py): 
-downscale 
-- [6_format_merge_DDTnetworks.py](https://github.com/messamat/cartographie_cours_deau/blob/master/6_format_merge_DDTnetworks.py): 
-downscale 
+remove invalid geometries, merge Yonne layers (watercourses and non-watercourses),
+check that network attribute names and categories match metadata for subsequent manual inspection.
+- [6_format_merge_DDTnetworks.py](https://github.com/messamat/cartographie_cours_deau/blob/master/6_format_merge_DDTnetworks.py):
+  - Format each departmental map (create editable layer in .gdb format with standard name,
+    remove features with incompatible formats or invalid geometry, standardize encoding, standardize attribute names,
+    delete duplicate lines keeping the ones with the most information, recategorize watercourses status attribute into five categories:
+    cours d'eau [watercourse], non cours d'eau [non-watercourse], indéterminé [uncategorized], inexistant [inexistent], and hors département [outside departmental
+    boundaries]), compute number of NAs per column, reproject to a standard coordinate system, convert polygons to centerlines).
+  - Merge all harmonized departmental maps
+  - Create unique ID (UID).
 
 ### Download and process reference networks and socio-environmental variables
-- [7_download_ancillary_data.py](https://github.com/messamat/cartographie_cours_deau/blob/master/7_download_ancillary_data.py): 
-compute 
+This part of the workflow requires an ArcGIS Pro license.
+
+- [7_download_ancillary_data.py](https://github.com/messamat/cartographie_cours_deau/blob/master/7_download_ancillary_data.py):
+download administrative and hydrographic boundaries, other (reference) hydrographic networks for comparison (BD TOPO, BD Carthage, BCAE),
+download other point-based monitoring data (river drying, macroinvertebrates, and fish data), download socio-environmental drivers.
 - [8_preprocess_reference_networks.py](https://github.com/messamat/cartographie_cours_deau/blob/master/8_preprocess_reference_networks.py): 
-downscale 
+prepare reference hydrographic data: intersect sub-catchments with department boundaries (this intersection is the finer unit of analysis for this study),
+create single feature class for each network, remove duplicate geometries, spatially match BD TOPO and BD Carthage with departmental maps,
+intersect all networks (including departmental maps) with catchment-department units of analysis.
+
 - [9_preprocess_ancillary_data.py](https://github.com/messamat/cartographie_cours_deau/blob/master/9_preprocess_ancillary_data.py): 
-downscale 
+preprocess all ancillary data (including dasymetric interpolation of irrigated area and population)
+and compute summary statistics by catchment-department unit of analysis, and by department
