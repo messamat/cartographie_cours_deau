@@ -1,4 +1,5 @@
 # Python code for 'Inconsistent Regulatory Mapping Quietly Threatens Rivers and Streams'
+Traduction de ce README en français: [![fr](https://img.shields.io/badge/lang-fr-blue.svg)](https://github.com/messamat/cartographie_cours_deau/blob/master/README.FR.md)  
 
 This repository contains python code associated with _Messager, M. L., Pella, H., & Datry, T. (2024). 
 Inconsistent regulatory mapping quietly threatens rivers and streams. Environmental Science & Technology. 
@@ -34,8 +35,6 @@ to contact Mathis L. Messager for comments and clarifications by email or to log
 
 Files needed to run this analysis are either downloaded directly from the code or were provided by Directions
 Departementales des Territoires. Please reach out to Mathis L. Messager for assistance with obtaining these data.
-The /data folder in the figshare repository contains raw data and the directory structure enables users to reproduce our 
-study using the scripts herein.
 
 ### Prerequisites
 All GIS analyses in this study require an ESRI ArcGIS Pro license including the Spatial Analyst extension, 
