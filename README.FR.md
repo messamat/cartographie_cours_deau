@@ -27,8 +27,6 @@ potentiellement considérables pour la biodiversité et les populations humaines
 cadres réglementaires de la plupart des pays soient également sensibles à l'interprétation locale des définitions 
 juridiques. 
 
-Voici la traduction en français tout en conservant les liens URL et les noms intacts :
-
 ## Introduction
 
 Ce dépôt comprend les parties de l'analyse effectuée en Python, qui englobent toute la mise en forme spatiale 
